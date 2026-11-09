@@ -1,0 +1,85 @@
+/* Componentes reutilizables (Tailwind se encarga del resto) */
+
+.card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+
+.label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+
+.input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background: #fff;
+}
+.input:focus {
+  outline: none;
+  border-color: #0f172a;
+  box-shadow: 0 0 0 2px rgb(15 23 42 / 0.1);
+}
+
+.btn-primary {
+  background: #0f172a;
+  color: #fff;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: opacity 0.15s;
+}
+.btn-primary:hover { opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.5; cursor: wait; }
+
+.btn-ghost {
+  font-size: 0.875rem;
+  color: #475569;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.5rem;
+}
+.btn-ghost:hover { background: #f1f5f9; }
+
+.kpi { display: flex; flex-direction: column; gap: 0.25rem; }
+.kpi-label { font-size: 0.75rem; color: #64748b; }
+.kpi-value { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.badge-hormiga {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translate(-50%, 1rem);
+  opacity: 0;
+  pointer-events: none;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: #fff;
+  background: #0f172a;
+  transition: all 0.2s;
+  max-width: 90vw;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.error { background: #dc2626; }
