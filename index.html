@@ -23,20 +23,31 @@
 
   <!-- ============ VISTA: CONFIGURACIÓN ============ -->
   <section id="view-setup" data-view class="hidden min-h-screen flex items-center justify-center p-4">
-    <form id="setup-form" class="card w-full max-w-md space-y-4" autocomplete="off">
-      <div>
+    <form id="setup-form" class="card w-full max-w-md space-y-4" action="#" method="post">
+      <div class="text-center">
+        <img src="icons/icon-192.png?v=2" alt="" class="w-20 h-20 mx-auto mb-3 rounded-2xl" />
         <h1 class="text-xl font-semibold">Conectar con tu base de datos</h1>
-        <p class="text-sm text-slate-500 mt-1">Se guarda solo en este navegador. No se sube a GitHub.</p>
+        <p class="text-sm text-slate-500 mt-1">Copia tu link de conexión y toca el botón. Solo se hace una vez por dispositivo.</p>
       </div>
-      <label class="block">
-        <span class="label">URL de la Web App</span>
-        <input name="url" type="url" required class="input" placeholder="https://script.google.com/macros/s/…/exec" />
-      </label>
-      <label class="block">
-        <span class="label">API_KEY</span>
-        <input name="key" type="password" required class="input" placeholder="xxxxxxxx-xxxx-…" />
-      </label>
-      <button type="submit" class="btn-primary w-full">Conectar</button>
+
+      <button id="btn-pegar" type="button" class="btn-primary w-full">Pegar link y conectar</button>
+
+      <details id="manual" class="text-sm">
+        <summary class="cursor-pointer text-slate-500 text-center select-none">Ingresar manualmente</summary>
+        <div class="space-y-3 mt-3">
+          <!-- Usuario oculto: permite que el llavero del iPhone guarde la key -->
+          <input type="text" name="username" value="Finanzas" autocomplete="username" class="hidden" readonly />
+          <label id="url-field" class="block">
+            <span class="label">URL de la Web App</span>
+            <input name="url" type="url" class="input" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" />
+          </label>
+          <label class="block">
+            <span class="label">API_KEY o link de conexión</span>
+            <input name="key" type="password" required class="input" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Pega aquí" />
+          </label>
+          <button type="submit" class="btn-ghost w-full border border-slate-300">Conectar</button>
+        </div>
+      </details>
     </form>
   </section>
 
@@ -47,6 +58,7 @@
         <h1 class="font-semibold">Control Financiero</h1>
         <div class="flex gap-2">
           <button id="btn-refresh" class="btn-ghost" title="Actualizar">↻</button>
+          <button id="btn-link" class="btn-ghost" title="Copiar link de conexión para otro dispositivo">🔗 Link</button>
           <button id="btn-logout" class="btn-ghost">Desconectar</button>
         </div>
       </div>

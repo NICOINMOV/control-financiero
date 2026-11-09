@@ -1,5 +1,11 @@
 /* Componentes reutilizables (Tailwind se encarga del resto) */
 
+/* Respeta la barra inferior del iPhone en modo app */
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+  -webkit-tap-highlight-color: transparent;
+}
+
 .card {
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -69,7 +75,7 @@
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 1.5rem;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom));
   transform: translate(-50%, 1rem);
   opacity: 0;
   pointer-events: none;
@@ -83,3 +89,8 @@
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.error { background: #dc2626; }
+
+/* iOS hace zoom en inputs con letra < 16px: lo evitamos en celular */
+@media (max-width: 640px) {
+  .input { font-size: 16px; }
+}

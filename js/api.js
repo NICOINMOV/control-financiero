@@ -3,21 +3,30 @@
  * Única parte de la app que sabe de URLs, keys y fetch.
  */
 
+import { API_URL } from './config.js';
+
 const STORAGE_KEY = 'cf_config_v1';
+
+/** URL fija de config.js (vacía si aún no se configuró) */
+export const FIXED_URL = /^https:\/\/script\.google\.com\/.+\/exec$/.test(API_URL) ? API_URL : '';
 
 // ---------- Configuración (URL + API_KEY en localStorage) ----------
 
 export function getConfig() {
+  let saved = null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    saved = raw ? JSON.parse(raw) : null;
   } catch {
-    return null;
+    saved = null;
   }
+  const url = FIXED_URL || (saved && saved.url) || '';
+  const key = (saved && saved.key) || '';
+  return url || key ? { url, key } : null;
 }
 
 export function saveConfig(url, key) {
-  const config = { url: url.trim(), key: key.trim() };
+  const config = { url: (FIXED_URL || url).trim(), key: key.trim() };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   return config;
 }

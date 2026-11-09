@@ -1,7 +1,7 @@
 /**
  * app.js — Lógica de interfaz. Habla solo con api.js.
  */
-import { api, getConfig, saveConfig, clearConfig, isConfigured } from './api.js';
+import { api, getConfig, saveConfig, clearConfig, isConfigured, FIXED_URL } from './api.js';
 
 // ---------- Utilidades ----------
 
@@ -33,31 +33,119 @@ function showView(id) {
   document.querySelectorAll('[data-view]').forEach((v) => v.classList.toggle('hidden', v.id !== id));
 }
 
+// ---------- Conexión (link mágico) ----------
+
+const URL_RE = /^https:\/\/script\.google\.com\/.+\/exec$/;
+
+/**
+ * Lee un link mágico (…#u=URL&k=KEY) o una key suelta.
+ * Devuelve { url, key } con lo que encuentre.
+ */
+function parseCredenciales(texto) {
+  const t = String(texto || '').trim();
+  if (!t) return {};
+  const hash = t.includes('#') ? t.slice(t.indexOf('#') + 1) : '';
+  if (hash) {
+    const p = new URLSearchParams(hash);
+    return { url: (p.get('u') || '').trim(), key: (p.get('k') || '').trim() };
+  }
+  if (URL_RE.test(t)) return { url: t };
+  if (/^[\w-]{16,}$/.test(t)) return { key: t };
+  return {};
+}
+
+/** Prueba la conexión y, si responde, la guarda */
+async function conectar({ url, key }) {
+  url = FIXED_URL || url || (getConfig() || {}).url || '';
+  if (!URL_RE.test(url)) throw new Error('Falta la URL de la Web App');
+  if (!key) throw new Error('Falta la API_KEY');
+  await api.ping({ url, key });
+  saveConfig(url, key);
+}
+
+function linkMagico() {
+  const c = getConfig();
+  if (!c || !c.key) return '';
+  const p = new URLSearchParams({ u: c.url, k: c.key });
+  return `${location.origin}${location.pathname}#${p}`;
+}
+
+async function copiarTexto(texto) {
+  try {
+    await navigator.clipboard.writeText(texto);
+    return true;
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
+}
+
 // ---------- Vista: Configuración ----------
 
 function initSetup() {
   const form = $('#setup-form');
   const cfg = getConfig();
-  if (cfg) {
+
+  if (FIXED_URL) {
+    $('#url-field').classList.add('hidden');
+    form.url.required = false;
+    form.url.value = FIXED_URL;
+  } else if (cfg) {
     form.url.value = cfg.url;
   }
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const url = form.url.value.trim();
-    const key = form.key.value.trim();
-    const btn = form.querySelector('button');
-
-    if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url)) {
-      toast('La URL debe terminar en /exec', 'error');
+  // Botón principal: lee el link del portapapeles y conecta
+  $('#btn-pegar').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    let texto = '';
+    try {
+      texto = await navigator.clipboard.readText();
+    } catch {
+      $('#manual').open = true;
+      toast('No pude leer el portapapeles. Pega el link abajo.', 'error');
       return;
     }
+    const cred = parseCredenciales(texto);
+    if (!cred.key) {
+      toast('Lo copiado no es tu link de conexión', 'error');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Conectando…';
+    try {
+      await conectar(cred);
+      toast('Conectado correctamente');
+      startApp();
+    } catch (err) {
+      toast(`No se pudo conectar: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Pegar link y conectar';
+    }
+  });
+
+  // Ingreso manual: acepta la key sola o el link mágico completo
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('button[type=submit]');
+    const desdeKey = parseCredenciales(form.key.value);
+    const cred = {
+      url: desdeKey.url || form.url.value.trim(),
+      key: desdeKey.key || form.key.value.trim(),
+    };
 
     btn.disabled = true;
     btn.textContent = 'Verificando…';
     try {
-      await api.ping({ url, key }); // prueba antes de guardar
-      saveConfig(url, key);
+      await conectar(cred);
       form.key.value = '';
       toast('Conectado correctamente');
       startApp();
@@ -68,6 +156,22 @@ function initSetup() {
       btn.textContent = 'Conectar';
     }
   });
+}
+
+/** Si la app se abrió con un link mágico, conecta sola y borra la key de la barra */
+async function conectarDesdeLink() {
+  if (!location.hash.includes('k=')) return false;
+  const cred = parseCredenciales(location.href);
+  history.replaceState(null, '', location.pathname + location.search);
+  if (!cred.key) return false;
+  try {
+    await conectar(cred);
+    toast('Conectado correctamente');
+    return true;
+  } catch (err) {
+    toast(`El link no funcionó: ${err.message}`, 'error');
+    return false;
+  }
 }
 
 // ---------- Vista: Dashboard ----------
@@ -183,11 +287,19 @@ function startApp() {
 
 // ---------- Arranque ----------
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initSetup();
   initMovimientoForm();
   $('#btn-logout').addEventListener('click', logout);
   $('#btn-refresh').addEventListener('click', refresh);
+  $('#btn-link').addEventListener('click', async () => {
+    const link = linkMagico();
+    if (!link) return toast('Conéctate primero', 'error');
+    (await copiarTexto(link))
+      ? toast('Link copiado. Guárdalo en un lugar privado.')
+      : toast('No se pudo copiar el link', 'error');
+  });
 
+  await conectarDesdeLink();
   isConfigured() ? startApp() : showView('view-setup');
 });
