@@ -98,6 +98,11 @@ export const api = {
   deleteMeta: (id) => apiPost('deleteMeta', { id }),
 
   getResumen: (mes) => apiGet('getResumen', mes ? { mes } : {}),
+
+  getCuentas: () => apiGet('getCuentas'),
+  addCuenta: (c) => apiPost('addCuenta', c),
+  updateCuenta: (c) => apiPost('updateCuenta', c),
+  deleteCuenta: (id) => apiPost('deleteCuenta', { id }),
 };
 
 export { ApiError };

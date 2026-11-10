@@ -11,6 +11,7 @@
  *    - getPresupuesto   [&mes=YYYY-MM]   (Gastado_Actual se calcula en vivo)
  *    - getAhorros
  *    - getResumen       [&mes=YYYY-MM]   (totales del mes, semana, hormiga, por medio)
+ *    - getCuentas       (saldo inicial y fecha de cada cuenta; el saldo actual lo calcula la app)
  *
  *  POST (body JSON enviado como text/plain para evitar CORS)
  *    { key, action, data }
@@ -23,6 +24,12 @@
  *    - updateMeta        data: {id, ...campos a cambiar}
  *    - abonarMeta        data: {id, monto}
  *    - deleteMeta        data: {id}
+ *    - addCuenta         data: {nombre, tipo, ambito, saldoInicial}
+ *    - updateCuenta      data: {id, ...campos}  (saldoInicial reinicia el punto de partida)
+ *    - deleteCuenta      data: {id}
+ *
+ *  Movimientos: Tipo Ingreso | Gasto | Traspaso (entre cuentas, no cuenta como gasto)
+ *  Cuenta / Cuenta_Destino = ID de la cuenta;  Ambito = Personal | INMOV
  */
 
 // ---------- CONFIGURACIÓN ----------
@@ -31,15 +38,18 @@ const SHEETS = {
   MOVIMIENTOS: 'Movimientos',
   PRESUPUESTO: 'Presupuesto',
   AHORROS: 'Ahorros',
+  CUENTAS: 'Cuentas',
 };
 
 const HEADERS = {
-  Movimientos: ['ID', 'Fecha', 'Categoría', 'Tipo', 'Medio', 'Monto', 'Descripción', 'Es_Hormiga', 'Creado'],
+  Movimientos: ['ID', 'Fecha', 'Categoría', 'Tipo', 'Medio', 'Monto', 'Descripción', 'Es_Hormiga', 'Creado', 'Cuenta', 'Cuenta_Destino', 'Ambito'],
   Presupuesto: ['Categoría', 'Limite_Mensual', 'Gastado_Actual'],
   Ahorros: ['ID', 'Meta_Nombre', 'Monto_Objetivo', 'Monto_Actual', 'Fecha_Limite'],
+  Cuentas: ['ID', 'Nombre', 'Tipo', 'Ambito', 'Saldo_Inicial', 'Fecha_Inicial'],
 };
 
-const TIPOS = ['Ingreso', 'Gasto'];
+const TIPOS = ['Ingreso', 'Gasto', 'Traspaso'];
+const AMBITOS = ['Personal', 'INMOV'];
 const MEDIOS = ['Débito', 'Crédito', 'Efectivo', 'Transferencia'];
 const TZ = Session.getScriptTimeZone();
 
@@ -77,6 +87,11 @@ function setupHojas() {
   const pre = ss.getSheetByName(SHEETS.PRESUPUESTO);
   pre.getRange('B2:C').setNumberFormat('#,##0');
 
+  const cue = ss.getSheetByName(SHEETS.CUENTAS);
+  cue.getRange('E2:E').setNumberFormat('#,##0');
+  cue.getRange('F2:F').setNumberFormat('yyyy-mm-dd hh:mm');
+  mov.getRange('L2:L').setDataValidation(listRule_(AMBITOS));
+
   const aho = ss.getSheetByName(SHEETS.AHORROS);
   aho.getRange('C2:D').setNumberFormat('#,##0');
   aho.getRange('E2:E').setNumberFormat('yyyy-mm-dd');
@@ -110,6 +125,7 @@ function doGet(e) {
       case 'getPresupuesto': return getPresupuesto_(p.mes);
       case 'getAhorros':     return getAhorros_();
       case 'getResumen':     return getResumen_(p.mes);
+      case 'getCuentas':     return getCuentas_();
       default: throw new Error('Acción GET no válida: ' + p.action);
     }
   });
@@ -135,6 +151,9 @@ function doPost(e) {
         case 'updateMeta':        return updateRow_(SHEETS.AHORROS, d.id, mapMeta_(d, true));
         case 'abonarMeta':        return abonarMeta_(d);
         case 'deleteMeta':        return deleteRow_(SHEETS.AHORROS, d.id);
+        case 'addCuenta':         return addCuenta_(d);
+        case 'updateCuenta':      return updateRow_(SHEETS.CUENTAS, d.id, mapCuenta_(d, true));
+        case 'deleteCuenta':      return deleteRow_(SHEETS.CUENTAS, d.id);
         default: throw new Error('Acción POST no válida: ' + body.action);
       }
     } finally {
@@ -219,10 +238,23 @@ function newId_() {
 
 // ---------- PARSEO / VALIDACIÓN ----------
 
+function serialToDate_(n) {
+  return new Date(Math.round((n - 25569) * 86400000) + new Date().getTimezoneOffset() * 60000);
+}
+
 function fmtDate_(v) {
   if (!v) return '';
+  if (typeof v === 'number') v = serialToDate_(v);
+  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
   const d = v instanceof Date ? v : new Date(v);
   return isNaN(d) ? '' : Utilities.formatDate(d, TZ, 'yyyy-MM-dd');
+}
+
+function fmtDateTime_(v) {
+  if (!v) return '';
+  if (typeof v === 'number') v = serialToDate_(v);
+  const d = v instanceof Date ? v : new Date(v);
+  return isNaN(d) ? '' : Utilities.formatDate(d, TZ, "yyyy-MM-dd'T'HH:mm:ss");
 }
 
 /** Acepta 'YYYY-MM-DD' y lo convierte a Date local (evita desfase UTC) */
@@ -254,10 +286,14 @@ function mapMovimiento_(d, partial) {
   if (!partial || d.fecha !== undefined)       f['Fecha'] = parseDate_(d.fecha);
   if (!partial || d.categoria !== undefined)   f['Categoría'] = String(d.categoria || '').trim() || 'Sin categoría';
   if (!partial || d.tipo !== undefined)        f['Tipo'] = inList_(d.tipo, TIPOS, 'Tipo');
-  if (!partial || d.medio !== undefined)       f['Medio'] = inList_(d.medio, MEDIOS, 'Medio');
+  if (!partial || d.medio !== undefined)       f['Medio'] = inList_(d.medio || 'Transferencia', MEDIOS, 'Medio');
   if (!partial || d.monto !== undefined)       f['Monto'] = parseMonto_(d.monto);
   if (!partial || d.descripcion !== undefined) f['Descripción'] = String(d.descripcion || '');
   if (!partial || d.esHormiga !== undefined)   f['Es_Hormiga'] = parseSiNo_(d.esHormiga);
+  if (!partial || d.cuenta !== undefined)      f['Cuenta'] = String(d.cuenta || '');
+  if (!partial || d.cuentaDestino !== undefined) f['Cuenta_Destino'] = String(d.cuentaDestino || '');
+  if (!partial || d.ambito !== undefined)      f['Ambito'] = AMBITOS.indexOf(d.ambito) >= 0 ? d.ambito : 'Personal';
+  if (f['Tipo'] === 'Traspaso' && (!f['Cuenta'] || !f['Cuenta_Destino'])) throw new Error('Un traspaso necesita cuenta de origen y destino');
   return f;
 }
 
@@ -281,6 +317,10 @@ function movToJson_(o) {
     monto: Number(o['Monto']) || 0,
     descripcion: o['Descripción'],
     esHormiga: o['Es_Hormiga'] === 'Sí',
+    creado: fmtDateTime_(o['Creado']),
+    cuenta: String(o['Cuenta'] || ''),
+    cuentaDestino: String(o['Cuenta_Destino'] || ''),
+    ambito: o['Ambito'] || 'Personal',
   };
 }
 
@@ -407,6 +447,40 @@ function abonarMeta_(d) {
   const nuevo = Math.max(0, (Number(cell.getValue()) || 0) + monto);
   cell.setValue(nuevo);
   return { id: d.id, montoActual: nuevo };
+}
+
+// ---------- CUENTAS ----------
+
+function mapCuenta_(d, partial) {
+  const f = {};
+  if (!partial || d.nombre !== undefined)       f['Nombre'] = String(d.nombre || '').trim();
+  if (!partial || d.tipo !== undefined)         f['Tipo'] = String(d.tipo || 'Ahorro');
+  if (!partial || d.ambito !== undefined)       f['Ambito'] = AMBITOS.indexOf(d.ambito) >= 0 ? d.ambito : 'Personal';
+  if (!partial || d.saldoInicial !== undefined) f['Saldo_Inicial'] = Number(d.saldoInicial) || 0;
+  if (!partial || d.saldoInicial !== undefined) f['Fecha_Inicial'] = new Date(); // ajustar saldo = nuevo punto de partida
+  if (!partial && !f['Nombre']) throw new Error('La cuenta necesita un nombre');
+  return f;
+}
+
+function getCuentas_() {
+  return readAll_(SHEETS.CUENTAS).map(function (o) {
+    return {
+      id: String(o['ID']),
+      nombre: o['Nombre'],
+      tipo: o['Tipo'],
+      ambito: o['Ambito'] || 'Personal',
+      saldoInicial: Number(o['Saldo_Inicial']) || 0,
+      fechaInicial: fmtDateTime_(o['Fecha_Inicial']),
+    };
+  });
+}
+
+function addCuenta_(d) {
+  const f = mapCuenta_(d, false);
+  const id = newId_();
+  const row = HEADERS.Cuentas.map(function (h) { return h === 'ID' ? id : f[h]; });
+  sheet_(SHEETS.CUENTAS).appendRow(row);
+  return { id: id };
 }
 
 // ---------- RESUMEN (dashboard) ----------

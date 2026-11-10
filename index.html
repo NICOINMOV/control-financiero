@@ -19,8 +19,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=3" />
-  <script type="module" src="js/app.js?v=3"></script>
+  <link rel="stylesheet" href="css/styles.css?v=4" />
+  <script type="module" src="js/app.js?v=4"></script>
 </head>
 <body>
 
@@ -77,6 +77,11 @@
         <button type="button" data-periodo="semana">Semana</button>
         <button type="button" data-periodo="hoy">Hoy</button>
       </div>
+      <div id="ambitos" class="segmented seg-small" role="tablist">
+        <button type="button" data-ambito="Personal" class="active">Personal</button>
+        <button type="button" data-ambito="INMOV">INMOV</button>
+        <button type="button" data-ambito="Todo">Todo</button>
+      </div>
 
       <!-- ---------- INICIO ---------- -->
       <div id="tab-inicio" data-tab>
@@ -98,6 +103,8 @@
           </div>
         </div>
 
+        <button type="button" id="patrimonio-home" class="card patri" data-goto="cuentas"></button>
+
         <div id="meta-home"></div>
 
         <div class="section-head">
@@ -117,6 +124,35 @@
           <h2 class="mb12">Gastos por medio de pago</h2>
           <div id="stats-medio" class="stack"></div>
         </div>
+      </div>
+
+      <!-- ---------- CUENTAS ---------- -->
+      <div id="tab-cuentas" data-tab class="hidden">
+        <div class="card balance">
+          <span class="muted small">Patrimonio total</span>
+          <span class="big-number gold" id="patri-total">—</span>
+          <div class="trio">
+            <div><span class="muted xs">Personal</span><span class="strong" id="patri-personal">—</span></div>
+            <div><span class="muted xs">INMOV</span><span class="strong" id="patri-inmov">—</span></div>
+            <div><span class="muted xs">Deuda tarjetas</span><span class="strong red" id="patri-deuda">—</span></div>
+          </div>
+        </div>
+        <div id="cuentas-list" class="stack"></div>
+        <button type="button" id="btn-traspaso" class="btn-ghost-block">↔ Hacer un traspaso entre cuentas</button>
+        <form id="cuenta-form" class="card stack">
+          <h2>Agregar cuenta</h2>
+          <label class="field"><span>Nombre</span><input name="nombre" required class="input" placeholder="Cuenta RUT" /></label>
+          <div class="grid2">
+            <label class="field"><span>Tipo</span>
+              <select name="tipo" class="input"><option>Billetera</option><option>Ahorro</option><option>Negocio</option><option>Crédito</option><option>Inversión</option></select>
+            </label>
+            <label class="field"><span>Es de</span>
+              <select name="ambito" class="input"><option>Personal</option><option>INMOV</option></select>
+            </label>
+          </div>
+          <label class="field"><span>Saldo actual</span><input name="saldo" type="number" inputmode="numeric" class="input" placeholder="0" /></label>
+          <button type="submit" class="btn-gold">Agregar cuenta</button>
+        </form>
       </div>
 
       <!-- ---------- METAS ---------- -->
@@ -163,13 +199,17 @@
       <button type="button" id="btn-nuevo" class="fab" aria-label="Nuevo movimiento">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
+      <button type="button" data-goto="cuentas" aria-label="Cuentas">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V10M19 21V10M9 21v-7M15 21v-7M2 10l10-6 10 6"/></svg>
+        <span>Cuentas</span>
+      </button>
       <button type="button" data-goto="metas" aria-label="Metas">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
         <span>Metas</span>
       </button>
       <button type="button" data-goto="presupuesto" aria-label="Presupuesto">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
-        <span>Presupuesto</span>
+        <span>Límites</span>
       </button>
     </nav>
   </section>
@@ -186,6 +226,7 @@
       <div class="segmented" id="tipo-seg">
         <button type="button" data-tipo="Gasto" class="active">Gasto</button>
         <button type="button" data-tipo="Ingreso">Ingreso</button>
+        <button type="button" data-tipo="Traspaso">Traspaso</button>
       </div>
       <input type="hidden" name="tipo" value="Gasto" />
 
@@ -194,14 +235,26 @@
         <div class="monto-row"><span>$</span><input name="monto" type="number" inputmode="numeric" min="1" step="1" required placeholder="0" /></div>
       </label>
 
-      <div class="field">
+      <div class="field" id="cuenta-field">
+        <span id="cuenta-label">Cuenta</span>
+        <div id="cuenta-chips" class="chips"></div>
+        <input type="hidden" name="cuenta" />
+      </div>
+
+      <div class="field hidden" id="destino-field">
+        <span>Hacia</span>
+        <div id="destino-chips" class="chips"></div>
+        <input type="hidden" name="cuentaDestino" />
+      </div>
+
+      <div class="field" id="cat-field">
         <span>Categoría</span>
         <div id="cat-chips" class="chips"></div>
         <input type="hidden" name="categoria" />
         <input id="cat-otra" class="input hidden mt8" placeholder="Escribe la categoría" />
       </div>
 
-      <div class="field">
+      <div class="field" id="medio-field">
         <span>Medio de pago</span>
         <div id="medio-chips" class="chips">
           <button type="button" class="chip active" data-medio="Débito">Débito</button>
@@ -221,6 +274,12 @@
         <input name="esHormiga" type="checkbox" />
         <span class="toggle-ui"></span>
         <span>Es gasto hormiga</span>
+      </label>
+
+      <label class="toggle" id="inmov-row">
+        <input name="esInmov" type="checkbox" />
+        <span class="toggle-ui"></span>
+        <span>Es de INMOV (negocio)</span>
       </label>
 
       <button type="submit" class="btn-gold">Guardar</button>
