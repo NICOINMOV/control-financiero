@@ -551,11 +551,12 @@ function renderTodo() {
 //  NAVEGACIÓN
 // ============================================================
 
-const TITULOS = { inicio: 'Pesito', stats: 'Gráficos', cuentas: 'Mis cuentas', metas: 'Metas de ahorro', presupuesto: 'Presupuesto' };
+const TITULOS = { inicio: 'Pesito', stats: 'Gastos y límites', cuentas: 'Mis cuentas', metas: 'Metas de ahorro', presupuesto: 'Gastos y límites' };
 
 function irA(tab) {
   st.tab = tab;
-  document.querySelectorAll('[data-tab]').forEach((el) => el.classList.toggle('hidden', el.id !== `tab-${tab}`));
+  const visibles = tab === 'stats' ? ['tab-stats', 'tab-presupuesto'] : [`tab-${tab}`];
+  document.querySelectorAll('[data-tab]').forEach((el) => el.classList.toggle('hidden', !visibles.includes(el.id)));
   document.querySelectorAll('.tabbar [data-goto]').forEach((b) => b.classList.toggle('active', b.dataset.goto === tab));
   $('#periodos').classList.toggle('hidden', !(tab === 'inicio' || tab === 'stats'));
   $('#ambitos').classList.toggle('hidden', !(tab === 'inicio' || tab === 'stats'));
@@ -969,7 +970,28 @@ function startApp() {
   refresh();
 }
 
+// ---------- Actualización automática ----------
+const APP_VERSION = '7';
+
+/** Si GitHub tiene una versión más nueva, recarga la app saltándose lo guardado */
+async function revisarVersion() {
+  try {
+    const r = await fetch(`version.json?ts=${Date.now()}`, { cache: 'no-store' });
+    const { v } = await r.json();
+    if (v && v !== APP_VERSION && sessionStorage.getItem('pesito_reload') !== v) {
+      sessionStorage.setItem('pesito_reload', v);
+      toast('Actualizando Pesito…');
+      setTimeout(() => location.replace(`${location.pathname}?v=${v}`), 400);
+    }
+  } catch { /* sin internet: seguimos con la versión actual */ }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') revisarVersion();
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
+  revisarVersion();
   initSetup();
   initMovSheet();
   initAcciones();
