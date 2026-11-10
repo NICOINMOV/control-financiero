@@ -1,7 +1,7 @@
 {
-  "name": "Control Financiero",
-  "short_name": "Finanzas",
-  "description": "Control de gastos, presupuesto y ahorro personal",
+  "name": "Pesito",
+  "short_name": "Pesito",
+  "description": "Pesito: tus lucas bajo control, con THOR",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

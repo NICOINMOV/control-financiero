@@ -193,14 +193,14 @@ const CATEGORIAS = {
     ['Supermercado', '🛒'], ['Comida', '🍽️'], ['Café', '☕'], ['Delivery', '🛵'],
     ['Transporte', '🚗'], ['Bencina', '⛽'], ['Hogar', '🏠'], ['Cuentas', '💡'],
     ['Salud', '💊'], ['Entretención', '🎬'], ['Suscripciones', '📺'], ['Ropa', '👕'],
-    ['Mascota', '🐶'], ['Otra', '✏️'],
+    ['Mascota', '🐶'], ['Compras', '🛍️'], ['Transferencias', '↗️'], ['Otra', '✏️'],
   ],
   Ingreso: [
     ['Sueldo', '💼'], ['Clientes', '🏋️'], ['Transferencia', '💸'], ['Otro', '✏️'],
   ],
 };
 const HORMIGA_SUGERIDAS = ['Café', 'Delivery'];
-const EMOJI = Object.fromEntries([...CATEGORIAS.Gasto, ...CATEGORIAS.Ingreso]);
+const EMOJI = Object.fromEntries([...CATEGORIAS.Gasto, ...CATEGORIAS.Ingreso, ['Otros', '🏷️']]);
 const emojiDe = (cat, tipo) => EMOJI[cat] || (tipo === 'Ingreso' ? '💰' : '🏷️');
 
 const isoDe = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -452,7 +452,7 @@ function renderTodo() {
 //  NAVEGACIÓN
 // ============================================================
 
-const TITULOS = { inicio: 'Mis finanzas', stats: 'Gráficos', metas: 'Metas de ahorro', presupuesto: 'Presupuesto' };
+const TITULOS = { inicio: 'Pesito', stats: 'Gráficos', metas: 'Metas de ahorro', presupuesto: 'Presupuesto' };
 
 function irA(tab) {
   st.tab = tab;
