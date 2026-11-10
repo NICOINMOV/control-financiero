@@ -971,7 +971,7 @@ function startApp() {
 }
 
 // ---------- Actualización automática ----------
-const APP_VERSION = '7';
+const APP_VERSION = '8';
 
 /** Si GitHub tiene una versión más nueva, recarga la app saltándose lo guardado */
 async function revisarVersion() {
