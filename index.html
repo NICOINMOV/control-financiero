@@ -4,128 +4,242 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="referrer" content="no-referrer" />
-  <title>Control Financiero</title>
+  <title>Finanzas</title>
 
   <!-- App instalable (pantalla completa, sin barra del navegador) -->
-  <link rel="manifest" href="manifest.json?v=2" />
-  <meta name="theme-color" content="#ffffff" />
+  <link rel="manifest" href="manifest.json?v=3" />
+  <meta name="theme-color" content="#0B0F17" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Finanzas" />
   <link rel="apple-touch-icon" href="icons/icon-180.png?v=2" />
   <link rel="icon" type="image/png" href="icons/icon-192.png?v=2" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="css/styles.css" />
-  <script type="module" src="js/app.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css?v=3" />
+  <script type="module" src="js/app.js?v=3"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen">
+<body>
 
-  <!-- ============ VISTA: CONFIGURACIÓN ============ -->
-  <section id="view-setup" data-view class="hidden min-h-screen flex items-center justify-center p-4">
-    <form id="setup-form" class="card w-full max-w-md space-y-4" action="#" method="post">
-      <div class="text-center">
-        <img src="icons/icon-192.png?v=2" alt="" class="w-20 h-20 mx-auto mb-3 rounded-2xl" />
-        <h1 class="text-xl font-semibold">Conectar con tu base de datos</h1>
-        <p class="text-sm text-slate-500 mt-1">Copia tu link de conexión y toca el botón. Solo se hace una vez por dispositivo.</p>
-      </div>
+  <!-- ============ CONEXIÓN ============ -->
+  <section id="view-setup" data-view class="hidden setup">
+    <form id="setup-form" class="setup-card" action="#" method="post">
+      <img src="icons/icon-192.png?v=2" alt="THOR" class="setup-thor" />
+      <h1>Conecta tu base de datos</h1>
+      <p class="muted">Copia tu link de conexión y toca el botón. Solo se hace una vez por dispositivo.</p>
 
-      <button id="btn-pegar" type="button" class="btn-primary w-full">Pegar link y conectar</button>
+      <button id="btn-pegar" type="button" class="btn-gold">Pegar link y conectar</button>
 
-      <details id="manual" class="text-sm">
-        <summary class="cursor-pointer text-slate-500 text-center select-none">Ingresar manualmente</summary>
-        <div class="space-y-3 mt-3">
-          <!-- Usuario oculto: permite que el llavero del iPhone guarde la key -->
+      <details id="manual">
+        <summary>Ingresar manualmente</summary>
+        <div class="stack">
           <input type="text" name="username" value="Finanzas" autocomplete="username" class="hidden" readonly />
-          <label id="url-field" class="block">
-            <span class="label">URL de la Web App</span>
+          <label id="url-field" class="field">
+            <span>URL de la Web App</span>
             <input name="url" type="url" class="input" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" />
           </label>
-          <label class="block">
-            <span class="label">API_KEY o link de conexión</span>
+          <label class="field">
+            <span>API_KEY o link de conexión</span>
             <input name="key" type="password" required class="input" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Pega aquí" />
           </label>
-          <button type="submit" class="btn-ghost w-full border border-slate-300">Conectar</button>
+          <button type="submit" class="btn-ghost-block">Conectar</button>
         </div>
       </details>
     </form>
   </section>
 
-  <!-- ============ VISTA: APP ============ -->
-  <section id="view-app" data-view class="hidden">
-    <header class="bg-white border-b border-slate-200">
-      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-        <h1 class="font-semibold">Control Financiero</h1>
-        <div class="flex gap-2">
-          <button id="btn-refresh" class="btn-ghost btn-icon" title="Actualizar" aria-label="Actualizar">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-          </button>
-          <button id="btn-link" class="btn-ghost" title="Copiar link de conexión para otro dispositivo">🔗 Link</button>
-          <button id="btn-logout" class="btn-ghost">Desconectar</button>
-        </div>
+  <!-- ============ APP ============ -->
+  <section id="view-app" data-view class="hidden app">
+
+    <header class="topbar">
+      <div>
+        <span class="muted small" id="saludo">Hola, Nico</span>
+        <h1 id="titulo">Mis finanzas</h1>
+      </div>
+      <div class="row gap8">
+        <button id="btn-refresh" class="icon-btn" aria-label="Actualizar">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        </button>
+        <button id="btn-ajustes" class="icon-btn" aria-label="Ajustes">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+        </button>
       </div>
     </header>
 
-    <main class="max-w-5xl mx-auto p-4 space-y-6">
+    <main class="content">
 
-      <!-- KPIs -->
-      <section class="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <div class="card kpi"><span class="kpi-label">Ingresos del mes</span><span id="kpi-ingresos" class="kpi-value text-emerald-600">—</span></div>
-        <div class="card kpi"><span class="kpi-label">Gastos del mes</span><span id="kpi-gastos" class="kpi-value text-red-600">—</span></div>
-        <div class="card kpi"><span class="kpi-label">Balance</span><span id="kpi-balance" class="kpi-value">—</span></div>
-        <div class="card kpi"><span class="kpi-label">Gastos esta semana</span><span id="kpi-semana" class="kpi-value">—</span></div>
-        <div class="card kpi"><span class="kpi-label">Gastos hormiga (mes)</span><span id="kpi-hormiga" class="kpi-value text-amber-600 text-lg">—</span></div>
-        <div class="card kpi"><span class="kpi-label">Gastado con crédito</span><span id="kpi-credito" class="kpi-value">—</span></div>
-      </section>
+      <!-- Pestañas de período (Inicio y Estadísticas) -->
+      <div id="periodos" class="segmented" role="tablist">
+        <button type="button" data-periodo="mes" class="active">Mes</button>
+        <button type="button" data-periodo="semana">Semana</button>
+        <button type="button" data-periodo="hoy">Hoy</button>
+      </div>
 
-      <div class="grid md:grid-cols-5 gap-6">
-        <!-- Formulario -->
-        <form id="mov-form" class="card md:col-span-2 space-y-3 self-start">
-          <h2 class="font-semibold">Nuevo movimiento</h2>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="min-w-0"><span class="label">Tipo</span>
-              <select name="tipo" class="input"><option>Gasto</option><option>Ingreso</option></select>
-            </label>
-            <label class="min-w-0"><span class="label">Fecha</span>
-              <input name="fecha" type="date" required class="input" />
-            </label>
+      <!-- ---------- INICIO ---------- -->
+      <div id="tab-inicio" data-tab>
+        <button id="thor" type="button" class="thor" aria-label="Otro consejo de THOR">
+          <img src="icons/icon-192.png?v=2" alt="" />
+          <div class="bubble">
+            <span class="thor-name">THOR DICE</span>
+            <span id="thor-tip">Cargando tus datos…</span>
           </div>
-          <label class="block"><span class="label">Monto</span>
-            <input name="monto" type="number" min="1" step="1" required inputmode="numeric" class="input" placeholder="0" />
-          </label>
-          <div>
-            <span class="label">Categoría</span>
-            <div id="cat-chips" class="flex flex-wrap gap-2"></div>
-            <input type="hidden" name="categoria" />
-            <input id="cat-otra" class="input mt-2 hidden" placeholder="Escribe la categoría" autocapitalize="sentences" />
+        </button>
+
+        <div class="card balance">
+          <span class="muted small" id="bal-label">Balance del mes</span>
+          <span class="big-number gold" id="bal-total">—</span>
+          <div class="trio">
+            <div><span class="muted xs">Ingresos</span><span class="green strong" id="bal-ing">—</span></div>
+            <div><span class="muted xs">Gastos</span><span class="red strong" id="bal-gas">—</span></div>
+            <div><span class="muted xs">Hormiga</span><span class="gold strong" id="bal-hor">—</span></div>
           </div>
-          <label class="block"><span class="label">Medio</span>
-            <select name="medio" class="input">
-              <option>Débito</option><option>Crédito</option><option>Efectivo</option><option>Transferencia</option>
-            </select>
-          </label>
-          <label class="block"><span class="label">Descripción</span>
-            <input name="descripcion" class="input" placeholder="Opcional" />
-          </label>
-          <label class="flex items-center gap-2 text-sm">
-            <input name="esHormiga" type="checkbox" class="h-4 w-4 accent-amber-500" />
-            Es gasto hormiga
-          </label>
-          <button type="submit" class="btn-primary w-full">Guardar</button>
+        </div>
+
+        <div id="meta-home"></div>
+
+        <div class="section-head">
+          <h2>Movimientos</h2>
+          <span class="muted small" id="mov-count"></span>
+        </div>
+        <div id="mov-list" class="list"></div>
+      </div>
+
+      <!-- ---------- ESTADÍSTICAS ---------- -->
+      <div id="tab-stats" data-tab class="hidden">
+        <div class="card">
+          <h2 class="mb12">Gastos por categoría</h2>
+          <div id="stats-cat" class="stack"></div>
+        </div>
+        <div class="card">
+          <h2 class="mb12">Gastos por medio de pago</h2>
+          <div id="stats-medio" class="stack"></div>
+        </div>
+      </div>
+
+      <!-- ---------- METAS ---------- -->
+      <div id="tab-metas" data-tab class="hidden">
+        <div id="metas-list" class="stack"></div>
+        <form id="meta-form" class="card stack">
+          <h2>Nueva meta de ahorro</h2>
+          <label class="field"><span>Nombre</span><input name="nombre" required class="input" placeholder="Vacaciones" /></label>
+          <div class="grid2">
+            <label class="field"><span>Objetivo</span><input name="montoObjetivo" type="number" inputmode="numeric" min="1" required class="input" placeholder="500000" /></label>
+            <label class="field"><span>Ya tengo</span><input name="montoActual" type="number" inputmode="numeric" min="0" class="input" placeholder="0" /></label>
+          </div>
+          <label class="field"><span>Fecha límite (opcional)</span><input name="fechaLimite" type="date" class="input" /></label>
+          <button type="submit" class="btn-gold">Crear meta</button>
         </form>
+      </div>
 
-        <!-- Lista -->
-        <section class="card md:col-span-3 overflow-x-auto">
-          <h2 class="font-semibold mb-2">Últimos movimientos</h2>
-          <table class="w-full text-sm">
-            <tbody id="mov-body">
-              <tr><td class="py-6 text-center text-slate-400">Cargando…</td></tr>
-            </tbody>
-          </table>
-        </section>
+      <!-- ---------- PRESUPUESTO ---------- -->
+      <div id="tab-presupuesto" data-tab class="hidden">
+        <div class="card">
+          <h2 class="mb4">Presupuesto del mes</h2>
+          <p class="muted small mb12">Pon un límite por categoría y THOR te avisa cuando te acerques.</p>
+          <div id="pres-list" class="stack"></div>
+        </div>
+        <form id="pres-form" class="card stack">
+          <h2>Agregar o cambiar límite</h2>
+          <label class="field"><span>Categoría</span><select name="categoria" class="input" id="pres-cat"></select></label>
+          <label class="field"><span>Límite mensual</span><input name="limite" type="number" inputmode="numeric" min="1" required class="input" placeholder="250000" /></label>
+          <button type="submit" class="btn-gold">Guardar límite</button>
+        </form>
       </div>
     </main>
+
+    <!-- Barra inferior -->
+    <nav class="tabbar">
+      <button type="button" data-goto="inicio" class="active" aria-label="Inicio">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+        <span>Inicio</span>
+      </button>
+      <button type="button" data-goto="stats" aria-label="Estadísticas">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+        <span>Gráficos</span>
+      </button>
+      <button type="button" id="btn-nuevo" class="fab" aria-label="Nuevo movimiento">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button type="button" data-goto="metas" aria-label="Metas">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+        <span>Metas</span>
+      </button>
+      <button type="button" data-goto="presupuesto" aria-label="Presupuesto">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+        <span>Presupuesto</span>
+      </button>
+    </nav>
   </section>
+
+  <!-- ============ HOJA: NUEVO MOVIMIENTO ============ -->
+  <div id="sheet-mov" class="sheet-backdrop hidden">
+    <form id="mov-form" class="sheet" action="#">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h2>Nuevo movimiento</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Cerrar">✕</button>
+      </div>
+
+      <div class="segmented" id="tipo-seg">
+        <button type="button" data-tipo="Gasto" class="active">Gasto</button>
+        <button type="button" data-tipo="Ingreso">Ingreso</button>
+      </div>
+      <input type="hidden" name="tipo" value="Gasto" />
+
+      <label class="monto-field">
+        <span class="muted small">Monto</span>
+        <div class="monto-row"><span>$</span><input name="monto" type="number" inputmode="numeric" min="1" step="1" required placeholder="0" /></div>
+      </label>
+
+      <div class="field">
+        <span>Categoría</span>
+        <div id="cat-chips" class="chips"></div>
+        <input type="hidden" name="categoria" />
+        <input id="cat-otra" class="input hidden mt8" placeholder="Escribe la categoría" />
+      </div>
+
+      <div class="field">
+        <span>Medio de pago</span>
+        <div id="medio-chips" class="chips">
+          <button type="button" class="chip active" data-medio="Débito">Débito</button>
+          <button type="button" class="chip" data-medio="Crédito">Crédito</button>
+          <button type="button" class="chip" data-medio="Efectivo">Efectivo</button>
+          <button type="button" class="chip" data-medio="Transferencia">Transferencia</button>
+        </div>
+        <input type="hidden" name="medio" value="Débito" />
+      </div>
+
+      <div class="grid2">
+        <label class="field"><span>Fecha</span><input name="fecha" type="date" required class="input" /></label>
+        <label class="field"><span>Descripción</span><input name="descripcion" class="input" placeholder="Opcional" /></label>
+      </div>
+
+      <label class="toggle" id="hormiga-row">
+        <input name="esHormiga" type="checkbox" />
+        <span class="toggle-ui"></span>
+        <span>Es gasto hormiga</span>
+      </label>
+
+      <button type="submit" class="btn-gold">Guardar</button>
+    </form>
+  </div>
+
+  <!-- ============ HOJA: AJUSTES ============ -->
+  <div id="sheet-ajustes" class="sheet-backdrop hidden">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h2>Ajustes</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Cerrar">✕</button>
+      </div>
+      <button type="button" id="btn-link" class="btn-ghost-block">Copiar link de conexión</button>
+      <p class="muted xs">Úsalo para conectar otro dispositivo. Trátalo como una contraseña.</p>
+      <button type="button" id="btn-logout" class="btn-danger-block">Desconectar este dispositivo</button>
+    </div>
+  </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>

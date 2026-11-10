@@ -8,7 +8,7 @@ import { api, getConfig, saveConfig, clearConfig, isConfigured, FIXED_URL } from
 const $ = (sel) => document.querySelector(sel);
 
 const clp = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 });
-const money = (n) => clp.format(Number(n) || 0);
+const money = (n) => { const v = Math.round(Number(n) || 0); return v < 0 ? '−' + clp.format(-v) : clp.format(v); };
 
 const hoyISO = () => {
   const d = new Date();
@@ -174,72 +174,19 @@ async function conectarDesdeLink() {
   }
 }
 
-// ---------- Vista: Dashboard ----------
 
-async function loadResumen() {
-  const r = await api.getResumen();
-  $('#kpi-ingresos').textContent = money(r.ingresosMes);
-  $('#kpi-gastos').textContent = money(r.gastosMes);
-  const bal = $('#kpi-balance');
-  bal.textContent = money(r.balanceMes);
-  bal.classList.toggle('text-red-600', r.balanceMes < 0);
-  bal.classList.toggle('text-emerald-600', r.balanceMes >= 0);
-  $('#kpi-semana').textContent = money(r.semana.gastos);
-  $('#kpi-hormiga').textContent = `${money(r.hormiga.totalMes)} · ${r.hormiga.cantidadMes} gastos`;
-  $('#kpi-credito').textContent = money(r.gastosPorMedio['Crédito']);
-}
+// ============================================================
+//  DATOS Y PERÍODOS
+// ============================================================
 
-async function loadMovimientos() {
-  const lista = await api.getMovimientos();
-  const tbody = $('#mov-body');
-
-  if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-400">Aún no hay movimientos</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = lista.slice(0, 20).map((m) => `
-    <tr class="border-t border-slate-100">
-      <td class="py-2 pr-3 text-slate-500 whitespace-nowrap">${escapeHtml(m.fecha)}</td>
-      <td class="py-2 pr-3">
-        ${escapeHtml(m.categoria)}
-        ${m.esHormiga ? '<span class="badge-hormiga">hormiga</span>' : ''}
-        <div class="text-xs text-slate-400">${escapeHtml(m.descripcion)}</div>
-      </td>
-      <td class="py-2 pr-3 text-slate-500">${escapeHtml(m.medio)}</td>
-      <td class="py-2 pr-3 text-right font-medium ${m.tipo === 'Gasto' ? 'text-red-600' : 'text-emerald-600'} whitespace-nowrap">
-        ${m.tipo === 'Gasto' ? '−' : '+'}${money(m.monto)}
-      </td>
-      <td class="py-2 text-right">
-        <button class="text-slate-300 hover:text-red-500" data-delete="${escapeHtml(m.id)}" title="Eliminar">✕</button>
-      </td>
-    </tr>`).join('');
-}
-
-let refrescando = false;
-
-/** Recarga resumen y movimientos. manual=true anima el botón y avisa al terminar */
-async function refresh(manual = false) {
-  if (refrescando) return;
-  refrescando = true;
-  const btn = $('#btn-refresh');
-  btn.classList.add('spinning');
-  btn.disabled = true;
-  const minimo = new Promise((r) => setTimeout(r, manual ? 700 : 0)); // que el giro se alcance a ver
-  try {
-    await Promise.all([loadResumen(), loadMovimientos(), minimo]);
-    if (manual) toast('Actualizado');
-  } catch (err) {
-    toast(err.message, 'error');
-    if (err.message === 'No autorizado') logout();
-  } finally {
-    btn.classList.remove('spinning');
-    btn.disabled = false;
-    refrescando = false;
-  }
-}
-
-// ---------- Categorías (botones) ----------
+const st = {
+  movs: [],
+  metas: [],
+  pres: [],
+  periodo: 'mes',
+  tab: 'inicio',
+  tipIdx: 0,
+};
 
 const CATEGORIAS = {
   Gasto: [
@@ -253,49 +200,383 @@ const CATEGORIAS = {
   ],
 };
 const HORMIGA_SUGERIDAS = ['Café', 'Delivery'];
+const EMOJI = Object.fromEntries([...CATEGORIAS.Gasto, ...CATEGORIAS.Ingreso]);
+const emojiDe = (cat, tipo) => EMOJI[cat] || (tipo === 'Ingreso' ? '💰' : '🏷️');
 
-function renderCategorias() {
+const isoDe = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+function lunesDe(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+}
+
+/** Rango [desde, hasta] en YYYY-MM-DD para un período. offset=-1 → período anterior */
+function rango(periodo, offset = 0) {
+  const hoy = new Date();
+  if (periodo === 'hoy') {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + offset);
+    return [isoDe(d), isoDe(d)];
+  }
+  if (periodo === 'semana') {
+    const l = lunesDe(hoy);
+    l.setDate(l.getDate() + offset * 7);
+    const dom = new Date(l.getFullYear(), l.getMonth(), l.getDate() + 6);
+    return [isoDe(l), isoDe(dom)];
+  }
+  const ini = new Date(hoy.getFullYear(), hoy.getMonth() + offset, 1);
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth() + offset + 1, 0);
+  return [isoDe(ini), isoDe(fin)];
+}
+
+function movsDe(periodo, offset = 0) {
+  const [a, b] = rango(periodo, offset);
+  return st.movs.filter((m) => m.fecha >= a && m.fecha <= b);
+}
+
+function totales(lista) {
+  let ing = 0, gas = 0, hor = 0, nHor = 0;
+  const porCat = {}, porMedio = {};
+  for (const m of lista) {
+    if (m.tipo === 'Ingreso') { ing += m.monto; continue; }
+    gas += m.monto;
+    porCat[m.categoria] = (porCat[m.categoria] || 0) + m.monto;
+    porMedio[m.medio] = (porMedio[m.medio] || 0) + m.monto;
+    if (m.esHormiga) { hor += m.monto; nHor++; }
+  }
+  return { ing, gas, hor, nHor, bal: ing - gas, porCat, porMedio };
+}
+
+const nombreMes = () => new Intl.DateTimeFormat('es-CL', { month: 'long' }).format(new Date());
+const TXT = {
+  mes: { en: 'este mes', label: () => `Balance de ${nombreMes()}` },
+  semana: { en: 'esta semana', label: () => 'Balance de esta semana' },
+  hoy: { en: 'hoy', label: () => 'Balance de hoy' },
+};
+
+function fechaCorta(iso) {
+  const hoy = isoDe(new Date());
+  const ayer = isoDe(new Date(Date.now() - 86400000));
+  if (iso === hoy) return 'Hoy';
+  if (iso === ayer) return 'Ayer';
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'short' }).format(new Date(y, m - 1, d));
+}
+
+const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
+
+// ============================================================
+//  THOR: consejos según tus datos
+// ============================================================
+
+function consejos() {
+  const p = st.periodo;
+  const en = TXT[p].en;
+  const t = totales(movsDe(p));
+  const out = [];
+
+  if (!st.movs.length) {
+    return ['¡Guau! Registra tu primer gasto con el botón + y te ayudo a cuidar tus lucas.'];
+  }
+
+  // Alertas de presupuesto (siempre del mes)
+  const tm = totales(movsDe('mes'));
+  for (const b of st.pres) {
+    const usado = tm.porCat[b.categoria] || 0;
+    const pc = pct(usado, b.limiteMensual);
+    if (pc >= 100) out.push(`¡Ojo! Te pasaste del presupuesto de ${b.categoria}: llevas ${money(usado)} de ${money(b.limiteMensual)}.`);
+    else if (pc >= 80) out.push(`Ya usaste el ${pc}% de tu presupuesto de ${b.categoria}. Te quedan ${money(b.limiteMensual - usado)}.`);
+  }
+
+  if (!t.ing && !t.gas) {
+    out.push(`No hay movimientos ${en}. ¡Vas impecable!`);
+  } else {
+    if (p !== 'hoy' && t.bal < 0) out.push(`Cuidado: ${en} gastaste ${money(-t.bal)} más de lo que entró.`);
+
+    if (t.hor > 0) {
+      out.push(`Llevas ${money(t.hor)} en gastos hormiga ${en} (${t.nHor}). Si los bajas a la mitad, te ahorras ${money(t.hor / 2)}.`);
+    }
+
+    const top = Object.entries(t.porCat).sort((a, b) => b[1] - a[1])[0];
+    if (top) out.push(`Tu mayor gasto ${en} es ${top[0]}: ${money(top[1])}.`);
+
+    if (p === 'semana') {
+      const antes = totales(movsDe('semana', -1)).gas;
+      if (antes > 0) {
+        const dif = antes - t.gas;
+        out.push(dif >= 0
+          ? `Esta semana llevas ${money(dif)} menos que la semana pasada. ¡Buen trabajo!`
+          : `Esta semana llevas ${money(-dif)} más que la semana pasada.`);
+      }
+    }
+
+    if (p === 'mes' && t.gas > 0) {
+      out.push(`Tu promedio de gasto diario ${en} es ${money(t.gas / new Date().getDate())}.`);
+    }
+
+    const cred = t.porMedio['Crédito'] || 0;
+    if (t.gas > 0 && pct(cred, t.gas) >= 50) {
+      out.push(`El ${pct(cred, t.gas)}% de tus gastos ${en} fue con crédito. Recuerda que eso se paga después.`);
+    }
+  }
+
+  const meta = st.metas.find((m) => m.montoActual < m.montoObjetivo);
+  if (meta) out.push(`Te faltan ${money(meta.montoObjetivo - meta.montoActual)} para tu meta "${meta.nombre}". ¡Tú puedes!`);
+  else if (!st.metas.length) out.push('¿Y si creamos una meta de ahorro? Ve a Metas y elige para qué quieres juntar.');
+
+  return out.length ? out : ['Todo en orden por aquí. ¡Sigue así!'];
+}
+
+function renderThor(animar = false) {
+  const lista = consejos();
+  const el = $('#thor-tip');
+  el.textContent = lista[st.tipIdx % lista.length];
+  if (animar) {
+    el.classList.remove('tip-in');
+    void el.offsetWidth;
+    el.classList.add('tip-in');
+  }
+}
+
+// ============================================================
+//  PANTALLAS
+// ============================================================
+
+function renderInicio() {
+  const p = st.periodo;
+  const lista = movsDe(p);
+  const t = totales(lista);
+
+  $('#bal-label').textContent = TXT[p].label();
+  $('#bal-total').textContent = money(t.bal);
+  $('#bal-ing').textContent = money(t.ing);
+  $('#bal-gas').textContent = money(t.gas);
+  $('#bal-hor').textContent = money(t.hor);
+
+  // Meta destacada
+  const meta = st.metas.find((m) => m.montoActual < m.montoObjetivo) || st.metas[0];
+  $('#meta-home').innerHTML = meta
+    ? `<button type="button" class="card meta-card" data-goto="metas" style="width:100%;text-align:left;color:inherit">
+        <div class="meta-top"><span class="strong">Meta: ${escapeHtml(meta.nombre)}</span><span class="meta-pct">${meta.progreso}%</span></div>
+        <div class="bar"><div style="width:${meta.progreso}%"></div></div>
+        <span class="muted xs">${money(meta.montoActual)} de ${money(meta.montoObjetivo)}${meta.fechaLimite ? ' · hasta ' + escapeHtml(fechaCorta(meta.fechaLimite)) : ''}</span>
+      </button>`
+    : `<button type="button" class="card meta-card" data-goto="metas" style="width:100%;text-align:left;color:inherit">
+        <div class="meta-top"><span class="strong">Crea tu primera meta de ahorro</span><span class="meta-pct">+</span></div>
+        <span class="muted xs">Vacaciones, un auto, un fondo de emergencia… THOR te acompaña.</span>
+      </button>`;
+
+  // Movimientos del período
+  $('#mov-count').textContent = lista.length ? `${lista.length} en total` : '';
+  $('#mov-list').innerHTML = lista.length
+    ? lista.slice(0, 40).map(movHTML).join('')
+    : `<div class="empty">No hay movimientos ${TXT[p].en}.<br>Toca el botón + para agregar uno.</div>`;
+}
+
+function movHTML(m) {
+  const gasto = m.tipo === 'Gasto';
+  return `<div class="mov">
+    <div class="mov-ico" aria-hidden="true">${emojiDe(m.categoria, m.tipo)}</div>
+    <div class="mov-txt">
+      <span class="t">${escapeHtml(m.categoria)}${m.esHormiga ? '<span class="badge">hormiga</span>' : ''}</span>
+      <span class="s">${escapeHtml(fechaCorta(m.fecha))} · ${escapeHtml(m.medio)}${m.descripcion ? ' · ' + escapeHtml(m.descripcion) : ''}</span>
+    </div>
+    <span class="mov-amt ${gasto ? 'red' : 'green'}">${gasto ? '−' : '+'}${money(m.monto)}</span>
+    <button type="button" class="mov-del" data-del="${escapeHtml(m.id)}" aria-label="Eliminar movimiento">✕</button>
+  </div>`;
+}
+
+function barrasHTML(obj, total) {
+  const filas = Object.entries(obj).sort((a, b) => b[1] - a[1]);
+  if (!filas.length) return `<div class="empty">Sin gastos ${TXT[st.periodo].en}.</div>`;
+  const max = filas[0][1];
+  return filas.map(([k, v]) => `<div class="stat-row">
+      <div class="stat-head"><span>${emojiDe(k, 'Gasto')} ${escapeHtml(k)}</span><span class="v">${money(v)} <span class="muted xs">${pct(v, total)}%</span></span></div>
+      <div class="bar"><div style="width:${pct(v, max)}%"></div></div>
+    </div>`).join('');
+}
+
+function renderStats() {
+  const t = totales(movsDe(st.periodo));
+  $('#stats-cat').innerHTML = barrasHTML(t.porCat, t.gas);
+  $('#stats-medio').innerHTML = barrasHTML(t.porMedio, t.gas).replace(/🏷️ /g, '');
+}
+
+function renderMetas() {
+  $('#metas-list').innerHTML = st.metas.length
+    ? st.metas.map((m) => `<div class="card meta-card">
+        <div class="meta-top"><h2>${escapeHtml(m.nombre)}</h2><span class="meta-pct">${m.progreso}%</span></div>
+        <div class="bar"><div style="width:${m.progreso}%"></div></div>
+        <div class="meta-top">
+          <span class="muted xs">${money(m.montoActual)} de ${money(m.montoObjetivo)}${m.fechaLimite ? ' · hasta ' + escapeHtml(fechaCorta(m.fechaLimite)) : ''}</span>
+          <button type="button" class="link-btn" data-meta-del="${escapeHtml(m.id)}">Eliminar</button>
+        </div>
+        <form class="meta-actions" data-abonar="${escapeHtml(m.id)}">
+          <input class="input" name="monto" type="number" inputmode="numeric" min="1" placeholder="Monto a abonar" aria-label="Monto a abonar a ${escapeHtml(m.nombre)}" required />
+          <button type="submit" class="btn-small gold-fill">Abonar</button>
+        </form>
+      </div>`).join('')
+    : `<div class="card"><div class="empty">Aún no tienes metas. Crea la primera aquí abajo.</div></div>`;
+}
+
+function renderPres() {
+  const tm = totales(movsDe('mes'));
+  $('#pres-list').innerHTML = st.pres.length
+    ? st.pres.map((b) => {
+        const usado = tm.porCat[b.categoria] || 0;
+        const pc = pct(usado, b.limiteMensual);
+        const cls = pc >= 100 ? 'over' : pc >= 80 ? 'warn' : '';
+        return `<div class="stat-row">
+          <div class="stat-head"><span>${emojiDe(b.categoria, 'Gasto')} ${escapeHtml(b.categoria)}</span><span class="v">${money(usado)} <span class="muted xs">/ ${money(b.limiteMensual)}</span></span></div>
+          <div class="bar ${cls}"><div style="width:${Math.min(100, pc)}%"></div></div>
+          <div class="stat-head"><span class="muted xs">${pc >= 100 ? 'Te pasaste por ' + money(usado - b.limiteMensual) : 'Quedan ' + money(b.limiteMensual - usado)}</span>
+          <button type="button" class="link-btn" data-pres-del="${escapeHtml(b.categoria)}">Quitar</button></div>
+        </div>`;
+      }).join('')
+    : `<div class="empty">Sin límites todavía.</div>`;
+
+  const cats = new Set(CATEGORIAS.Gasto.map((c) => c[0]).filter((c) => c !== 'Otra'));
+  st.movs.forEach((m) => m.tipo === 'Gasto' && cats.add(m.categoria));
+  $('#pres-cat').innerHTML = [...cats].map((c) => `<option>${escapeHtml(c)}</option>`).join('');
+}
+
+function renderTodo() {
+  renderThor();
+  renderInicio();
+  renderStats();
+  renderMetas();
+  renderPres();
+}
+
+// ============================================================
+//  NAVEGACIÓN
+// ============================================================
+
+const TITULOS = { inicio: 'Mis finanzas', stats: 'Gráficos', metas: 'Metas de ahorro', presupuesto: 'Presupuesto' };
+
+function irA(tab) {
+  st.tab = tab;
+  document.querySelectorAll('[data-tab]').forEach((el) => el.classList.toggle('hidden', el.id !== `tab-${tab}`));
+  document.querySelectorAll('.tabbar [data-goto]').forEach((b) => b.classList.toggle('active', b.dataset.goto === tab));
+  $('#periodos').classList.toggle('hidden', !(tab === 'inicio' || tab === 'stats'));
+  $('#titulo').textContent = TITULOS[tab];
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function saludo() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Buenos días, Nico' : h < 20 ? 'Buenas tardes, Nico' : 'Buenas noches, Nico';
+}
+
+// ============================================================
+//  CARGA
+// ============================================================
+
+let refrescando = false;
+
+async function refresh(manual = false) {
+  if (refrescando) return;
+  refrescando = true;
+  const btn = $('#btn-refresh');
+  btn.classList.add('spinning');
+  btn.disabled = true;
+  const minimo = new Promise((r) => setTimeout(r, manual ? 700 : 0));
+  try {
+    const [movs, metas, pres] = await Promise.all([api.getMovimientos(), api.getAhorros(), api.getPresupuesto(), minimo]);
+    st.movs = movs;
+    st.metas = metas;
+    st.pres = pres;
+    renderTodo();
+    if (manual) toast('Actualizado');
+  } catch (err) {
+    toast(err.message, 'error');
+    if (err.message === 'No autorizado') logout();
+  } finally {
+    btn.classList.remove('spinning');
+    btn.disabled = false;
+    refrescando = false;
+  }
+}
+
+// ============================================================
+//  HOJAS (nuevo movimiento, ajustes)
+// ============================================================
+
+function abrir(id) {
+  $(id).classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function cerrar(id) {
+  $(id).classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function setTipo(tipo) {
+  const form = $('#mov-form');
+  form.tipo.value = tipo;
+  document.querySelectorAll('#tipo-seg button').forEach((b) => b.classList.toggle('active', b.dataset.tipo === tipo));
+  $('#hormiga-row').classList.toggle('hidden', tipo !== 'Gasto');
+  if (tipo !== 'Gasto') form.esHormiga.checked = false;
+  renderChips();
+}
+
+function renderChips() {
   const form = $('#mov-form');
   const lista = CATEGORIAS[form.tipo.value] || CATEGORIAS.Gasto;
-  $('#cat-chips').innerHTML = lista.map(([nombre, emoji]) => `
-    <button type="button" class="chip" data-cat="${escapeHtml(nombre)}">
-      <span>${emoji}</span>${escapeHtml(nombre)}
-    </button>`).join('');
+  $('#cat-chips').innerHTML = lista.map(([n, e]) =>
+    `<button type="button" class="chip" data-cat="${escapeHtml(n)}"><span aria-hidden="true">${e}</span>${escapeHtml(n)}</button>`).join('');
   form.categoria.value = '';
   $('#cat-otra').classList.add('hidden');
   $('#cat-otra').value = '';
 }
 
-function initCategorias() {
+function resetMovForm() {
   const form = $('#mov-form');
-  renderCategorias();
-  form.tipo.addEventListener('change', renderCategorias);
+  form.reset();
+  form.fecha.value = hoyISO();
+  form.medio.value = 'Débito';
+  document.querySelectorAll('#medio-chips .chip').forEach((c) => c.classList.toggle('active', c.dataset.medio === 'Débito'));
+  setTipo('Gasto');
+}
+
+function initMovSheet() {
+  const form = $('#mov-form');
+  resetMovForm();
+
+  $('#btn-nuevo').addEventListener('click', () => {
+    resetMovForm();
+    abrir('#sheet-mov');
+    setTimeout(() => form.monto.focus(), 250);
+  });
+
+  $('#tipo-seg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tipo]');
+    if (b) setTipo(b.dataset.tipo);
+  });
 
   $('#cat-chips').addEventListener('click', (e) => {
     const chip = e.target.closest('.chip');
     if (!chip) return;
     document.querySelectorAll('#cat-chips .chip').forEach((c) => c.classList.toggle('active', c === chip));
     const cat = chip.dataset.cat;
-    const esOtra = cat === 'Otra' || cat === 'Otro';
-    const otra = $('#cat-otra');
-    otra.classList.toggle('hidden', !esOtra);
-    if (esOtra) {
+    const otra = cat === 'Otra' || cat === 'Otro';
+    $('#cat-otra').classList.toggle('hidden', !otra);
+    if (otra) {
       form.categoria.value = '';
-      otra.focus();
+      $('#cat-otra').focus();
     } else {
       form.categoria.value = cat;
       if (form.tipo.value === 'Gasto' && HORMIGA_SUGERIDAS.includes(cat)) form.esHormiga.checked = true;
     }
   });
+  $('#cat-otra').addEventListener('input', (e) => { form.categoria.value = e.target.value.trim(); });
 
-  $('#cat-otra').addEventListener('input', (e) => {
-    form.categoria.value = e.target.value.trim();
+  $('#medio-chips').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-medio]');
+    if (!chip) return;
+    form.medio.value = chip.dataset.medio;
+    document.querySelectorAll('#medio-chips .chip').forEach((c) => c.classList.toggle('active', c === chip));
   });
-}
-
-function initMovimientoForm() {
-  const form = $('#mov-form');
-  form.fecha.value = hoyISO();
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -309,65 +590,198 @@ function initMovimientoForm() {
       descripcion: form.descripcion.value,
       esHormiga: form.esHormiga.checked,
     };
-
     if (!(mov.monto > 0)) return toast('Ingresa un monto mayor a 0', 'error');
     if (!mov.categoria) return toast('Elige una categoría', 'error');
 
     btn.disabled = true;
+    btn.textContent = 'Guardando…';
     try {
       await api.addMovimiento(mov);
-      toast('Movimiento guardado');
-      form.reset();
-      form.fecha.value = hoyISO();
-      renderCategorias();
+      cerrar('#sheet-mov');
+      toast(mov.tipo === 'Gasto' ? 'Gasto guardado' : 'Ingreso guardado');
+      st.tipIdx = 0;
       refresh();
     } catch (err) {
       toast(err.message, 'error');
     } finally {
       btn.disabled = false;
-    }
-  });
-
-  $('#mov-body').addEventListener('click', async (e) => {
-    const id = e.target.dataset.delete;
-    if (!id) return;
-    e.target.disabled = true;
-    try {
-      await api.deleteMovimiento(id);
-      toast('Movimiento eliminado');
-      refresh();
-    } catch (err) {
-      toast(err.message, 'error');
-      e.target.disabled = false;
+      btn.textContent = 'Guardar';
     }
   });
 }
 
-// ---------- Sesión ----------
+/** Botones que piden un segundo toque para confirmar (sin ventanas emergentes) */
+function confirmarDosToques(btn, textoConfirmar) {
+  if (btn.dataset.armed) return true;
+  btn.dataset.armed = '1';
+  const original = btn.textContent;
+  btn.textContent = textoConfirmar;
+  btn.classList.add('confirm');
+  setTimeout(() => {
+    if (!btn.isConnected) return;
+    delete btn.dataset.armed;
+    btn.textContent = original;
+    btn.classList.remove('confirm');
+  }, 3000);
+  return false;
+}
+
+function initAcciones() {
+  // Borrar movimiento
+  $('#mov-list').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-del]');
+    if (!btn || !confirmarDosToques(btn, '¿Borrar?')) return;
+    btn.disabled = true;
+    try {
+      await api.deleteMovimiento(btn.dataset.del);
+      toast('Movimiento eliminado');
+      refresh();
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false;
+    }
+  });
+
+  // Metas: abonar y eliminar
+  $('#metas-list').addEventListener('submit', async (e) => {
+    const f = e.target.closest('[data-abonar]');
+    if (!f) return;
+    e.preventDefault();
+    const monto = Number(f.monto.value);
+    if (!(monto > 0)) return;
+    const b = f.querySelector('button');
+    b.disabled = true;
+    try {
+      await api.abonarMeta(f.dataset.abonar, monto);
+      toast(`¡${money(monto)} abonados! THOR está orgulloso`);
+      refresh();
+    } catch (err) {
+      toast(err.message, 'error');
+      b.disabled = false;
+    }
+  });
+  $('#metas-list').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-meta-del]');
+    if (!btn || !confirmarDosToques(btn, '¿Seguro?')) return;
+    try {
+      await api.deleteMeta(btn.dataset.metaDel);
+      toast('Meta eliminada');
+      refresh();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  $('#meta-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const b = f.querySelector('button[type=submit]');
+    b.disabled = true;
+    try {
+      await api.addMeta({
+        nombre: f.nombre.value.trim(),
+        montoObjetivo: Number(f.montoObjetivo.value),
+        montoActual: Number(f.montoActual.value || 0),
+        fechaLimite: f.fechaLimite.value || '',
+      });
+      f.reset();
+      toast('Meta creada');
+      refresh();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      b.disabled = false;
+    }
+  });
+
+  // Presupuesto
+  $('#pres-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const b = f.querySelector('button[type=submit]');
+    b.disabled = true;
+    try {
+      await api.setPresupuesto(f.categoria.value, Number(f.limite.value));
+      f.limite.value = '';
+      toast('Límite guardado');
+      refresh();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      b.disabled = false;
+    }
+  });
+  $('#pres-list').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-pres-del]');
+    if (!btn || !confirmarDosToques(btn, '¿Seguro?')) return;
+    try {
+      await api.deletePresupuesto(btn.dataset.presDel);
+      toast('Límite quitado');
+      refresh();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+}
+
+// ============================================================
+//  SESIÓN Y ARRANQUE
+// ============================================================
 
 function logout() {
   clearConfig();
+  cerrar('#sheet-ajustes');
   showView('view-setup');
 }
 
 function startApp() {
   showView('view-app');
+  $('#saludo').textContent = saludo();
+  irA('inicio');
   refresh();
 }
 
-// ---------- Arranque ----------
-
 document.addEventListener('DOMContentLoaded', async () => {
   initSetup();
-  initMovimientoForm();
-  initCategorias();
+  initMovSheet();
+  initAcciones();
 
-  // Sin zoom con pellizco (iOS ignora user-scalable en algunos casos)
+  // Sin zoom con pellizco
   ['gesturestart', 'gesturechange'].forEach((ev) =>
     document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
 
-  $('#btn-logout').addEventListener('click', logout);
+  // Navegación (barra inferior y tarjetas con data-goto)
+  document.addEventListener('click', (e) => {
+    const g = e.target.closest('[data-goto]');
+    if (g) irA(g.dataset.goto);
+  });
+
+  // Pestañas Mes / Semana / Hoy
+  $('#periodos').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-periodo]');
+    if (!b) return;
+    st.periodo = b.dataset.periodo;
+    st.tipIdx = 0;
+    document.querySelectorAll('#periodos button').forEach((x) => x.classList.toggle('active', x === b));
+    renderTodo();
+    renderThor(true);
+  });
+
+  // THOR: tocar para otro consejo
+  $('#thor').addEventListener('click', () => {
+    st.tipIdx++;
+    renderThor(true);
+  });
+
+  // Hojas: cerrar con ✕ o tocando fuera
+  document.querySelectorAll('.sheet-backdrop').forEach((bd) => {
+    bd.addEventListener('click', (e) => {
+      if (e.target === bd || e.target.closest('[data-close]')) cerrar('#' + bd.id);
+    });
+  });
+
   $('#btn-refresh').addEventListener('click', () => refresh(true));
+  $('#btn-ajustes').addEventListener('click', () => abrir('#sheet-ajustes'));
+  $('#btn-logout').addEventListener('click', logout);
   $('#btn-link').addEventListener('click', async () => {
     const link = linkMagico();
     if (!link) return toast('Conéctate primero', 'error');
