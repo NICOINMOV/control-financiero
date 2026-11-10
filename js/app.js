@@ -526,6 +526,7 @@ function renderCuentas() {
             </div>
             <span class="cuenta-saldo ${v < 0 ? 'red' : ''}">${money(v)}</span>
           </div>
+          ${c.tipo === 'Crédito' ? `<button type="button" class="btn-gold" data-pagar="${escapeHtml(c.id)}">Pagar tarjeta</button>` : ''}
           <form class="meta-actions" data-ajustar="${escapeHtml(c.id)}">
             <input class="input" name="saldo" type="number" inputmode="numeric" placeholder="Saldo real hoy" aria-label="Saldo real de ${escapeHtml(c.nombre)}" required />
             <button type="submit" class="btn-small">Ajustar</button>
@@ -675,11 +676,27 @@ function renderChips() {
 
 function resetMovForm(tipo = 'Gasto') {
   const form = $('#mov-form');
+  $('#mov-titulo').textContent = 'Nuevo movimiento';
   form.reset();
   form.fecha.value = hoyISO();
   form.cuenta.value = '';
   setMedio('Débito');
   setTipo(tipo);
+}
+
+/** "Pagar tarjeta": un traspaso hacia la tarjeta, con todo listo */
+function abrirPagoTarjeta(idTarjeta) {
+  const form = $('#mov-form');
+  const t = cuentaPorId(idTarjeta);
+  resetMovForm('Traspaso');
+  if (form.cuenta.value === idTarjeta) setCuenta((st.cuentas.find((c) => c.id !== idTarjeta && c.tipo === 'Billetera') || {}).id || '');
+  form.cuentaDestino.value = idTarjeta;
+  chipsCuentas('#destino-chips', idTarjeta, form.cuenta.value);
+  form.descripcion.value = `Pago ${t ? t.nombre : 'tarjeta'}`;
+  $('#mov-titulo').textContent = 'Pagar tarjeta';
+  $('#cuenta-label').textContent = '¿Desde qué cuenta pagaste?';
+  abrir('#sheet-mov');
+  setTimeout(() => form.monto.focus(), 250);
 }
 
 function initMovSheet() {
@@ -764,7 +781,7 @@ function initMovSheet() {
     try {
       await api.addMovimiento(mov);
       cerrar('#sheet-mov');
-      toast(tras ? 'Traspaso guardado' : mov.tipo === 'Gasto' ? 'Gasto guardado' : 'Ingreso guardado');
+      toast(tras && (cuentaPorId(mov.cuentaDestino) || {}).tipo === 'Crédito' ? 'Pago de tarjeta guardado. La deuda bajó' : tras ? 'Traspaso guardado' : mov.tipo === 'Gasto' ? 'Gasto guardado' : 'Ingreso guardado');
       st.tipIdx = 0;
       refresh();
     } catch (err) {
@@ -876,6 +893,8 @@ function initAcciones() {
     }
   });
   $('#cuentas-list').addEventListener('click', async (e) => {
+    const pagar = e.target.closest('[data-pagar]');
+    if (pagar) return abrirPagoTarjeta(pagar.dataset.pagar);
     const btn = e.target.closest('[data-cuenta-del]');
     if (!btn || !confirmarDosToques(btn, '¿Seguro?')) return;
     try {
