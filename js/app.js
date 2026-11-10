@@ -216,13 +216,81 @@ async function loadMovimientos() {
     </tr>`).join('');
 }
 
-async function refresh() {
+let refrescando = false;
+
+/** Recarga resumen y movimientos. manual=true anima el botón y avisa al terminar */
+async function refresh(manual = false) {
+  if (refrescando) return;
+  refrescando = true;
+  const btn = $('#btn-refresh');
+  btn.classList.add('spinning');
+  btn.disabled = true;
+  const minimo = new Promise((r) => setTimeout(r, manual ? 700 : 0)); // que el giro se alcance a ver
   try {
-    await Promise.all([loadResumen(), loadMovimientos()]);
+    await Promise.all([loadResumen(), loadMovimientos(), minimo]);
+    if (manual) toast('Actualizado');
   } catch (err) {
     toast(err.message, 'error');
     if (err.message === 'No autorizado') logout();
+  } finally {
+    btn.classList.remove('spinning');
+    btn.disabled = false;
+    refrescando = false;
   }
+}
+
+// ---------- Categorías (botones) ----------
+
+const CATEGORIAS = {
+  Gasto: [
+    ['Supermercado', '🛒'], ['Comida', '🍽️'], ['Café', '☕'], ['Delivery', '🛵'],
+    ['Transporte', '🚗'], ['Bencina', '⛽'], ['Hogar', '🏠'], ['Cuentas', '💡'],
+    ['Salud', '💊'], ['Entretención', '🎬'], ['Suscripciones', '📺'], ['Ropa', '👕'],
+    ['Mascota', '🐶'], ['Otra', '✏️'],
+  ],
+  Ingreso: [
+    ['Sueldo', '💼'], ['Clientes', '🏋️'], ['Transferencia', '💸'], ['Otro', '✏️'],
+  ],
+};
+const HORMIGA_SUGERIDAS = ['Café', 'Delivery'];
+
+function renderCategorias() {
+  const form = $('#mov-form');
+  const lista = CATEGORIAS[form.tipo.value] || CATEGORIAS.Gasto;
+  $('#cat-chips').innerHTML = lista.map(([nombre, emoji]) => `
+    <button type="button" class="chip" data-cat="${escapeHtml(nombre)}">
+      <span>${emoji}</span>${escapeHtml(nombre)}
+    </button>`).join('');
+  form.categoria.value = '';
+  $('#cat-otra').classList.add('hidden');
+  $('#cat-otra').value = '';
+}
+
+function initCategorias() {
+  const form = $('#mov-form');
+  renderCategorias();
+  form.tipo.addEventListener('change', renderCategorias);
+
+  $('#cat-chips').addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    document.querySelectorAll('#cat-chips .chip').forEach((c) => c.classList.toggle('active', c === chip));
+    const cat = chip.dataset.cat;
+    const esOtra = cat === 'Otra' || cat === 'Otro';
+    const otra = $('#cat-otra');
+    otra.classList.toggle('hidden', !esOtra);
+    if (esOtra) {
+      form.categoria.value = '';
+      otra.focus();
+    } else {
+      form.categoria.value = cat;
+      if (form.tipo.value === 'Gasto' && HORMIGA_SUGERIDAS.includes(cat)) form.esHormiga.checked = true;
+    }
+  });
+
+  $('#cat-otra').addEventListener('input', (e) => {
+    form.categoria.value = e.target.value.trim();
+  });
 }
 
 function initMovimientoForm() {
@@ -243,6 +311,7 @@ function initMovimientoForm() {
     };
 
     if (!(mov.monto > 0)) return toast('Ingresa un monto mayor a 0', 'error');
+    if (!mov.categoria) return toast('Elige una categoría', 'error');
 
     btn.disabled = true;
     try {
@@ -250,6 +319,7 @@ function initMovimientoForm() {
       toast('Movimiento guardado');
       form.reset();
       form.fecha.value = hoyISO();
+      renderCategorias();
       refresh();
     } catch (err) {
       toast(err.message, 'error');
@@ -290,8 +360,14 @@ function startApp() {
 document.addEventListener('DOMContentLoaded', async () => {
   initSetup();
   initMovimientoForm();
+  initCategorias();
+
+  // Sin zoom con pellizco (iOS ignora user-scalable en algunos casos)
+  ['gesturestart', 'gesturechange'].forEach((ev) =>
+    document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+
   $('#btn-logout').addEventListener('click', logout);
-  $('#btn-refresh').addEventListener('click', refresh);
+  $('#btn-refresh').addEventListener('click', () => refresh(true));
   $('#btn-link').addEventListener('click', async () => {
     const link = linkMagico();
     if (!link) return toast('Conéctate primero', 'error');

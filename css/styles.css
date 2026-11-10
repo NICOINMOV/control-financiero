@@ -1,9 +1,14 @@
 /* Componentes reutilizables (Tailwind se encarga del resto) */
 
 /* Respeta la barra inferior del iPhone en modo app */
+html {
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation; /* sin zoom por doble toque */
+}
 body {
   padding-bottom: env(safe-area-inset-bottom);
   -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
 }
 
 .card {
@@ -89,6 +94,39 @@ body {
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.error { background: #dc2626; }
+
+/* Campos del mismo alto; la fecha no se sale del recuadro en iPhone */
+.input { min-width: 0; min-height: 2.75rem; box-sizing: border-box; }
+input[type="date"].input {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  text-align: left;
+}
+input[type="date"].input::-webkit-date-and-time-value { text-align: left; }
+
+/* Botones de categoría */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.875rem;
+  color: #334155;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+.chip:active { transform: scale(0.96); }
+.chip.active { background: #0f172a; border-color: #0f172a; color: #fff; }
+
+/* Botón actualizar con giro */
+.btn-icon { display: inline-flex; align-items: center; justify-content: center; }
+.btn-icon svg { transition: transform 0.2s; }
+.btn-icon:active svg { transform: rotate(-30deg); }
+.spinning svg { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* iOS hace zoom en inputs con letra < 16px: lo evitamos en celular */
 @media (max-width: 640px) {

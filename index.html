@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="referrer" content="no-referrer" />
   <title>Control Financiero</title>
 
@@ -57,7 +57,9 @@
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
         <h1 class="font-semibold">Control Financiero</h1>
         <div class="flex gap-2">
-          <button id="btn-refresh" class="btn-ghost" title="Actualizar">↻</button>
+          <button id="btn-refresh" class="btn-ghost btn-icon" title="Actualizar" aria-label="Actualizar">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          </button>
           <button id="btn-link" class="btn-ghost" title="Copiar link de conexión para otro dispositivo">🔗 Link</button>
           <button id="btn-logout" class="btn-ghost">Desconectar</button>
         </div>
@@ -81,31 +83,27 @@
         <form id="mov-form" class="card md:col-span-2 space-y-3 self-start">
           <h2 class="font-semibold">Nuevo movimiento</h2>
           <div class="grid grid-cols-2 gap-3">
-            <label><span class="label">Tipo</span>
+            <label class="min-w-0"><span class="label">Tipo</span>
               <select name="tipo" class="input"><option>Gasto</option><option>Ingreso</option></select>
             </label>
-            <label><span class="label">Fecha</span>
+            <label class="min-w-0"><span class="label">Fecha</span>
               <input name="fecha" type="date" required class="input" />
             </label>
           </div>
           <label class="block"><span class="label">Monto</span>
             <input name="monto" type="number" min="1" step="1" required inputmode="numeric" class="input" placeholder="0" />
           </label>
-          <div class="grid grid-cols-2 gap-3">
-            <label><span class="label">Categoría</span>
-              <input name="categoria" list="categorias" required class="input" placeholder="Comida" />
-            </label>
-            <label><span class="label">Medio</span>
-              <select name="medio" class="input">
-                <option>Débito</option><option>Crédito</option><option>Efectivo</option><option>Transferencia</option>
-              </select>
-            </label>
+          <div>
+            <span class="label">Categoría</span>
+            <div id="cat-chips" class="flex flex-wrap gap-2"></div>
+            <input type="hidden" name="categoria" />
+            <input id="cat-otra" class="input mt-2 hidden" placeholder="Escribe la categoría" autocapitalize="sentences" />
           </div>
-          <datalist id="categorias">
-            <option>Comida</option><option>Supermercado</option><option>Transporte</option><option>Café</option>
-            <option>Delivery</option><option>Hogar</option><option>Salud</option><option>Entretención</option>
-            <option>Suscripciones</option><option>Sueldo</option><option>Clientes</option>
-          </datalist>
+          <label class="block"><span class="label">Medio</span>
+            <select name="medio" class="input">
+              <option>Débito</option><option>Crédito</option><option>Efectivo</option><option>Transferencia</option>
+            </select>
+          </label>
           <label class="block"><span class="label">Descripción</span>
             <input name="descripcion" class="input" placeholder="Opcional" />
           </label>
