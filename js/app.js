@@ -255,14 +255,16 @@ function saldoCuenta(c) {
 }
 
 function patrimonio() {
-  let total = 0, personal = 0, inmov = 0, deuda = 0;
+  let total = 0, personal = 0, inmov = 0, deuda = 0, ahorro = 0, disponible = 0;
   for (const c of st.cuentas) {
     const v = saldoCuenta(c);
     total += v;
     if (c.ambito === 'INMOV') inmov += v; else personal += v;
-    if (v < 0) deuda += -v;
+    if (c.tipo === 'Crédito') deuda += Math.max(0, -v);
+    else if (c.tipo === 'Ahorro') ahorro += v;
+    else disponible += v;
   }
-  return { total, personal, inmov, deuda };
+  return { total, personal, inmov, deuda, ahorro, disponible };
 }
 
 function totales(lista) {
@@ -298,84 +300,191 @@ function fechaCorta(iso) {
 const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
 
 // ============================================================
-//  THOR: consejos según tus datos
+//  THOR: consejos y alertas (con su toque pasivo-agresivo)
 // ============================================================
 
+const esAhorro = (c) => c && c.tipo === 'Ahorro';
+
+/** Elige una frase de la lista de forma estable durante el día (no cambia en cada recarga) */
+function frase(clave, opciones) {
+  const semilla = `${hoyISO()}|${clave}`;
+  let h = 0;
+  for (const ch of semilla) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return opciones[h % opciones.length];
+}
+
+function diasRestantesMes() {
+  const h = new Date();
+  return new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate() - h.getDate();
+}
+
+/** Plata que salió de cuentas de ahorro este mes (gastos o traspasos hacia otras cuentas) */
+function salidaDeAhorro() {
+  const ids = new Set(st.cuentas.filter(esAhorro).map((c) => c.id));
+  if (!ids.size) return 0;
+  return movsDe('mes', 0, 'Todo').reduce((s, m) => {
+    if (!ids.has(m.cuenta)) return s;
+    if (m.tipo === 'Gasto') return s + m.monto;
+    if (m.tipo === 'Traspaso' && !ids.has(m.cuentaDestino)) return s + m.monto;
+    return s;
+  }, 0);
+}
+
+/** Lista de { txt, nivel } — nivel: 'alerta' (rojo), 'aviso' (naranjo), 'info' */
 function consejos() {
   const p = st.periodo;
   const en = TXT[p].en;
   const t = totales(movsDe(p));
-  const out = [];
+  const alertas = [], avisos = [], info = [];
 
   if (!st.movs.length) {
-    return ['¡Guau! Registra tu primer gasto con el botón + y te ayudo a cuidar tus lucas.'];
+    return [{ txt: '¡Guau! Registra tu primer gasto con el botón + y te ayudo a cuidar tus lucas.', nivel: 'info' }];
   }
 
-  // Alertas de presupuesto (siempre del mes)
+  // ---- Presupuestos (siempre del mes) ----
   const tm = totales(movsDe('mes', 0, 'Todo'));
+  const quedan = diasRestantesMes();
   for (const b of st.pres) {
     const usado = tm.porCat[b.categoria] || 0;
     const pc = pct(usado, b.limiteMensual);
-    if (pc >= 100) out.push(`¡Ojo! Te pasaste del presupuesto de ${b.categoria}: llevas ${money(usado)} de ${money(b.limiteMensual)}.`);
-    else if (pc >= 80) out.push(`Ya usaste el ${pc}% de tu presupuesto de ${b.categoria}. Te quedan ${money(b.limiteMensual - usado)}.`);
+    const cat = b.categoria;
+    if (pc >= 100) {
+      alertas.push(frase('pres+' + cat, [
+        `Te pasaste ${money(usado - b.limiteMensual)} en ${cat}. Pero tranquilo, el presupuesto era solo una sugerencia, ¿no? 🙃`,
+        `${cat}: ${pc}% del presupuesto. Impresionante. No en el buen sentido.`,
+        `Presupuesto de ${cat}: ${money(b.limiteMensual)}. Lo que gastaste: ${money(usado)}. Yo no digo nada… pero lo digo. 🐶`,
+      ]));
+    } else if (pc >= 80) {
+      avisos.push(frase('pres80' + cat, [
+        `Vas en el ${pc}% de ${cat} y quedan ${quedan} días del mes. Haz la matemática… yo ya la hice. 🧮`,
+        `Te quedan ${money(b.limiteMensual - usado)} para ${cat}. Úsalos con sabiduría. O no, total eres adulto. 🙄`,
+      ]));
+    }
+  }
+
+  // ---- Ahorro protegido tocado ----
+  const sacado = salidaDeAhorro();
+  if (sacado > 0) {
+    alertas.push(frase('ahorro', [
+      `Salieron ${money(sacado)} de tu ahorro protegido este mes. Espero que haya sido una emergencia de verdad. 👀`,
+      `Alguien sacó ${money(sacado)} del ahorro "que no se toca". No voy a decir quién. (Fuiste tú.) 🐾`,
+    ]));
   }
 
   if (!t.ing && !t.gas) {
-    out.push(`No hay movimientos ${en}. ¡Vas impecable!`);
+    info.push({ txt: `No hay movimientos ${en}. ¡Vas impecable! … o se te olvidó anotar. 🤨`, nivel: 'info' });
   } else {
-    if (p !== 'hoy' && t.bal < 0) out.push(`Cuidado: ${en} gastaste ${money(-t.bal)} más de lo que entró.`);
+    // ---- Gastas más de lo que entra ----
+    if (p !== 'hoy' && t.bal < 0) {
+      alertas.push(frase('rojo' + p + st.ambito, [
+        `${en[0].toUpperCase() + en.slice(1)} gastaste ${money(-t.bal)} más de lo que entró. Not stonks 📉. Tus ahorros te miran nerviosos.`,
+        `Entró ${money(t.ing)}, salió ${money(t.gas)}. Sé que las matemáticas no son lo tuyo, pero eso da negativo. 🙃`,
+        `Vas ${money(-t.bal)} en rojo ${en}. Yo solo soy un perro, pero hasta yo sé que eso no se hace. 🐶`,
+      ]));
+    }
 
+    // ---- Proyección del mes ----
+    if (p === 'mes' && t.gas > 0 && quedan > 3) {
+      const proy = Math.round((t.gas / new Date().getDate()) * (new Date().getDate() + quedan));
+      if (t.ing > 0 && proy > t.ing * 1.1) {
+        avisos.push(frase('proy', [
+          `A este ritmo cierras el mes gastando ${money(proy)} y han entrado ${money(t.ing)}. Sin presión. 😬`,
+          `Si sigues así, el mes termina en ${money(proy)} de gastos. Quedan ${quedan} días para demostrar que me equivoco.`,
+        ]));
+      }
+    }
+
+    // ---- Hormiga ----
     if (t.hor > 0) {
-      out.push(`Llevas ${money(t.hor)} en gastos hormiga ${en} (${t.nHor}). Si los bajas a la mitad, te ahorras ${money(t.hor / 2)}.`);
+      (t.nHor >= 5 ? avisos : info).push(frase('hor' + p, [
+        `${t.nHor} gastos hormiga ${en}: ${money(t.hor)}. Las hormigas te lo agradecen, tu bolsillo no. 🐜`,
+        `Llevas ${money(t.hor)} en gastos hormiga ${en}. Si los bajas a la mitad, te ahorras ${money(t.hor / 2)}. Solo digo.`,
+      ]));
+    }
+
+    // ---- Delivery ----
+    const nDel = movsDe(p).filter((m) => m.tipo === 'Gasto' && (m.categoria === 'Delivery' || m.categoria === 'Café')).length;
+    if (nDel >= 4) {
+      avisos.push(frase('del' + p, [
+        `${nDel} deliveries y cafés ${en}. Tu cocina preguntó por ti, le dije que estabas bien. 🍳`,
+        `${nDel} pedidos ${en}. El repartidor ya te saluda por tu nombre, ¿cierto? 🛵`,
+      ]));
+    }
+
+    // ---- Crédito ----
+    const cred = t.porMedio['Crédito'] || 0;
+    if (t.gas > 0 && pct(cred, t.gas) >= 50) {
+      info.push(frase('cred' + p, [
+        `El ${pct(cred, t.gas)}% de tus gastos ${en} fue con crédito. El "yo del futuro" te manda saludos. 💳`,
+        `${pct(cred, t.gas)}% con tarjeta ${en}. Recuerda: la CMR no es plata extra, es plata prestada. 🙃`,
+      ]));
     }
 
     const top = Object.entries(t.porCat).sort((a, b) => b[1] - a[1])[0];
-    if (top) out.push(`Tu mayor gasto ${en} es ${top[0]}: ${money(top[1])}.`);
+    if (top) info.push(`Tu mayor gasto ${en} es ${top[0]}: ${money(top[1])}.`);
 
     if (p === 'semana') {
       const antes = totales(movsDe('semana', -1)).gas;
       if (antes > 0) {
         const dif = antes - t.gas;
-        out.push(dif >= 0
-          ? `Esta semana llevas ${money(dif)} menos que la semana pasada. ¡Buen trabajo!`
-          : `Esta semana llevas ${money(-dif)} más que la semana pasada.`);
+        info.push(dif >= 0
+          ? `Esta semana llevas ${money(dif)} menos que la semana pasada. ¿Ves que sí se puede? 🐶✨`
+          : `Esta semana llevas ${money(-dif)} más que la semana pasada. Interesante decisión.`);
       }
-    }
-
-    if (p === 'mes' && t.gas > 0) {
-      out.push(`Tu promedio de gasto diario ${en} es ${money(t.gas / new Date().getDate())}.`);
-    }
-
-    const cred = t.porMedio['Crédito'] || 0;
-    if (t.gas > 0 && pct(cred, t.gas) >= 50) {
-      out.push(`El ${pct(cred, t.gas)}% de tus gastos ${en} fue con crédito. Recuerda que eso se paga después.`);
     }
   }
 
   if (st.ambito === 'INMOV' && (t.ing || t.gas)) {
-    out.push(`INMOV ${en}: entró ${money(t.ing)} y salió ${money(t.gas)}. ${t.bal >= 0 ? 'El negocio va en verde. Stonks 📈' : 'Ojo, el negocio va en rojo. Not stonks 📉'}`);
+    info.push(`INMOV ${en}: entró ${money(t.ing)} y salió ${money(t.gas)}. ${t.bal >= 0 ? 'El negocio va en verde. Stonks 📈' : 'Ojo, el negocio va en rojo. Not stonks 📉'}`);
   }
-  if (st.cuentas.length) {
+
+  if (st.cuentas.length && !sacado) {
     const pt = patrimonio();
-    out.push(`Entre todas tus cuentas tienes ${money(pt.total)}. Tu ahorro y tu negocio, juntos.`);
+    if (pt.ahorro > 0) info.push(`Tu ahorro protegido sigue intacto: ${money(pt.ahorro)} 🔒. Así me gusta.`);
   }
 
   const meta = st.metas.find((m) => m.montoActual < m.montoObjetivo);
-  if (meta) out.push(`Te faltan ${money(meta.montoObjetivo - meta.montoActual)} para tu meta "${meta.nombre}". ¡Tú puedes!`);
-  else if (!st.metas.length) out.push('¿Y si creamos una meta de ahorro? Ve a Metas y elige para qué quieres juntar.');
+  if (meta) info.push(`Te faltan ${money(meta.montoObjetivo - meta.montoActual)} para tu meta "${meta.nombre}". ¡Tú puedes!`);
+  else if (!st.metas.length) info.push('¿Y si creamos una meta de ahorro? Ve a Metas y elige para qué quieres juntar.');
 
-  return out.length ? out : ['Todo en orden por aquí. ¡Sigue así!'];
+  const lista = [
+    ...alertas.map((txt) => ({ txt, nivel: 'alerta' })),
+    ...avisos.map((txt) => ({ txt, nivel: 'aviso' })),
+    ...info.map((x) => (typeof x === 'string' ? { txt: x, nivel: 'info' } : x)),
+  ];
+  return lista.length ? lista : [{ txt: 'Todo en orden por aquí. Sospechosamente en orden. 🤔', nivel: 'info' }];
 }
 
 function renderThor(animar = false) {
   const lista = consejos();
+  const actual = lista[st.tipIdx % lista.length];
   const el = $('#thor-tip');
-  el.textContent = lista[st.tipIdx % lista.length];
+  el.textContent = actual.txt;
+  const bubble = el.closest('.bubble');
+  bubble.classList.toggle('alerta', actual.nivel === 'alerta');
+  bubble.classList.toggle('aviso', actual.nivel === 'aviso');
+  const n = lista.filter((x) => x.nivel !== 'info').length;
+  $('#thor-name').textContent = n ? `THOR DICE · ${n} ${n === 1 ? 'aviso' : 'avisos'}` : 'THOR DICE';
   if (animar) {
     el.classList.remove('tip-in');
     void el.offsetWidth;
     el.classList.add('tip-in');
   }
+}
+
+/** Al abrir la app: si hay alertas, THOR se hace notar */
+let thorAviso = '';
+function avisarAlAbrir() {
+  const al = consejos().filter((x) => x.nivel === 'alerta');
+  if (!al.length) return;
+  const clave = `${hoyISO()}|${al.length}`;
+  if (thorAviso === clave) return;
+  thorAviso = clave;
+  toast(`🐶 THOR tiene ${al.length} ${al.length === 1 ? 'cosa' : 'cosas'} que decirte`, 'error');
+  const img = $('#thor img');
+  img.classList.remove('shake');
+  void img.offsetWidth;
+  img.classList.add('shake');
 }
 
 // ============================================================
@@ -398,7 +507,7 @@ function renderInicio() {
   if (st.cuentas.length) {
     const pt = patrimonio();
     ph.classList.remove('hidden');
-    ph.innerHTML = `<div style="display:flex;flex-direction:column;gap:2px"><span class="muted xs">Tus cuentas (${st.cuentas.length})</span><span class="strong">Patrimonio total</span></div><span class="v">${money(pt.total)}</span>`;
+    ph.innerHTML = `<div style="display:flex;flex-direction:column;gap:2px"><span class="muted xs">Disponible ${money(pt.disponible)} · Deuda ${money(pt.deuda)}</span><span class="strong">🔒 Ahorro protegido</span></div><span class="v">${money(pt.ahorro)}</span>`;
   } else {
     ph.classList.add('hidden');
   }
@@ -506,10 +615,13 @@ const TIPO_ICO = { Billetera: '👛', Ahorro: '🏦', Negocio: '🏋️', 'Créd
 
 function renderCuentas() {
   const pt = patrimonio();
-  $('#patri-total').textContent = money(pt.total);
-  $('#patri-personal').textContent = money(pt.personal);
-  $('#patri-inmov').textContent = money(pt.inmov);
+  $('#patri-ahorro').textContent = money(pt.ahorro);
+  $('#patri-disponible').textContent = money(pt.disponible);
   $('#patri-deuda').textContent = money(pt.deuda);
+  $('#patri-neto').textContent = money(pt.total);
+  $('#patri-ahorro-estado').textContent = salidaDeAhorro() > 0
+    ? `Este mes salieron ${money(salidaDeAhorro())} del ahorro 👀`
+    : 'Intacto este mes. Bien ahí. 🐶';
   if (!st.cuentasOk) {
     $('#cuentas-list').innerHTML = `<div class="card"><div class="empty">Para ver tus cuentas, actualiza el Code.gs en Google Apps Script (te dejé los pasos).</div></div>`;
     return;
@@ -591,6 +703,7 @@ async function refresh(manual = false) {
     st.pres = pres;
     renderTodo();
     if (manual) toast('Actualizado');
+    else setTimeout(avisarAlAbrir, 600);
   } catch (err) {
     toast(err.message, 'error');
     if (err.message === 'No autorizado') logout();
@@ -971,7 +1084,7 @@ function startApp() {
 }
 
 // ---------- Actualización automática ----------
-const APP_VERSION = '8';
+const APP_VERSION = '9';
 
 /** Si GitHub tiene una versión más nueva, recarga la app saltándose lo guardado */
 async function revisarVersion() {

@@ -536,3 +536,123 @@ function getResumen_(mes) {
     gastosPorCategoria: porCategoria,
   };
 }
+
+// ============================================================
+//  ALERTAS DE THOR POR CORREO
+//  1) Ejecuta activarAlertasThor() UNA vez desde el editor (pide permiso para enviar correos).
+//  2) Cada noche a las 21:00 THOR revisa tus números y te escribe SOLO si hay algo nuevo.
+//  Para apagarlo: ejecuta desactivarAlertasThor().
+// ============================================================
+
+const APP_URL = 'https://nicoinmov.github.io/control-financiero/';
+const THOR_IMG = APP_URL + 'icons/icon-192.png';
+
+function activarAlertasThor() {
+  desactivarAlertasThor();
+  ScriptApp.newTrigger('revisarAlertasThor').timeBased().everyDays(1).atHour(21).create();
+  revisarAlertasThor();
+  Logger.log('Listo: THOR te escribirá cada noche si hay algo que avisar.');
+}
+
+function desactivarAlertasThor() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'revisarAlertasThor') ScriptApp.deleteTrigger(t);
+  });
+}
+
+function money_(n) {
+  const v = Math.round(Number(n) || 0);
+  const s = '$' + Math.abs(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return v < 0 ? '−' + s : s;
+}
+
+/** Calcula las alertas del mes en curso */
+function calcularAlertasThor_() {
+  const mes = mesActual_();
+  const hoy = new Date();
+  const diasMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+  const quedan = diasMes - hoy.getDate();
+  const movs = readAll_(SHEETS.MOVIMIENTOS).map(movToJson_).filter(function (m) { return m.fecha.slice(0, 7) === mes; });
+  let cuentas = [];
+  try { cuentas = getCuentas_(); } catch (e) { cuentas = []; }
+  const ahorroIds = cuentas.filter(function (c) { return c.tipo === 'Ahorro'; }).map(function (c) { return c.id; });
+
+  const alertas = []; // { clave, texto }
+
+  // Presupuestos
+  const porCat = {};
+  movs.forEach(function (m) { if (m.tipo === 'Gasto') porCat[m.categoria] = (porCat[m.categoria] || 0) + m.monto; });
+  let pres = [];
+  try { pres = readAll_(SHEETS.PRESUPUESTO); } catch (e) { pres = []; }
+  pres.forEach(function (o) {
+    const cat = o['Categoría'], lim = Number(o['Limite_Mensual']) || 0, usado = porCat[cat] || 0;
+    if (!lim) return;
+    const pc = Math.round((usado / lim) * 100);
+    if (pc >= 100) alertas.push({ clave: mes + '|pres100|' + cat, texto: 'Te pasaste ' + money_(usado - lim) + ' en ' + cat + '. Pero tranquilo, el presupuesto era solo una sugerencia, ¿no? 🙃' });
+    else if (pc >= 80) alertas.push({ clave: mes + '|pres80|' + cat, texto: 'Vas en el ' + pc + '% de ' + cat + ' y quedan ' + quedan + ' días del mes. Haz la matemática… yo ya la hice. 🧮' });
+  });
+
+  // Gastos personales vs ingresos personales
+  let ing = 0, gas = 0;
+  movs.forEach(function (m) {
+    if ((m.ambito || 'Personal') !== 'Personal') return;
+    if (m.tipo === 'Ingreso') ing += m.monto;
+    if (m.tipo === 'Gasto') gas += m.monto;
+  });
+  if (gas > ing) {
+    const tramo = Math.floor((gas - ing) / 100000); // avisa de nuevo cada $100.000 más en rojo
+    alertas.push({ clave: mes + '|rojo|' + tramo, texto: 'Este mes gastaste ' + money_(gas - ing) + ' más de lo que entró. Not stonks 📉. Tus ahorros te miran nerviosos.' });
+  }
+
+  // Ahorro protegido tocado
+  let sacado = 0;
+  movs.forEach(function (m) {
+    if (ahorroIds.indexOf(m.cuenta) < 0) return;
+    if (m.tipo === 'Gasto') sacado += m.monto;
+    if (m.tipo === 'Traspaso' && ahorroIds.indexOf(m.cuentaDestino) < 0) sacado += m.monto;
+  });
+  if (sacado > 0) alertas.push({ clave: mes + '|ahorro|' + sacado, texto: 'Salieron ' + money_(sacado) + ' de tu ahorro protegido este mes. Espero que haya sido una emergencia de verdad. 👀' });
+
+  // Hormiga
+  const hormiga = movs.filter(function (m) { return m.tipo === 'Gasto' && m.esHormiga; });
+  if (hormiga.length >= 8) {
+    const total = hormiga.reduce(function (s, m) { return s + m.monto; }, 0);
+    alertas.push({ clave: mes + '|hormiga|' + Math.floor(hormiga.length / 8), texto: hormiga.length + ' gastos hormiga este mes (' + money_(total) + '). Las hormigas te lo agradecen, tu bolsillo no. 🐜' });
+  }
+
+  return alertas;
+}
+
+/** Envía por correo solo las alertas que aún no se han avisado */
+function revisarAlertasThor() {
+  const props = PropertiesService.getScriptProperties();
+  let enviadas = {};
+  try { enviadas = JSON.parse(props.getProperty('THOR_ENVIADAS') || '{}'); } catch (e) { enviadas = {}; }
+  const mes = mesActual_();
+  Object.keys(enviadas).forEach(function (k) { if (k.indexOf(mes) !== 0) delete enviadas[k]; }); // limpia meses anteriores
+
+  const nuevas = calcularAlertasThor_().filter(function (a) { return !enviadas[a.clave]; });
+  if (!nuevas.length) return { enviadas: 0 };
+
+  const items = nuevas.map(function (a) {
+    return '<li style="margin:0 0 12px;line-height:1.45">' + a.texto + '</li>';
+  }).join('');
+  const html =
+    '<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;background:#0B0F17;color:#F1F5F9;padding:24px;border-radius:20px">' +
+    '<img src="' + THOR_IMG + '" width="72" height="72" style="border-radius:18px;border:2px solid #F5B82E" alt="THOR">' +
+    '<h2 style="color:#F5B82E;margin:16px 0 8px">THOR tiene algo que decirte</h2>' +
+    '<ul style="padding-left:18px;margin:0 0 20px">' + items + '</ul>' +
+    '<a href="' + APP_URL + '" style="display:inline-block;background:#F5B82E;color:#0B0F17;padding:12px 20px;border-radius:12px;font-weight:bold;text-decoration:none">Abrir Pesito</a>' +
+    '</div>';
+
+  MailApp.sendEmail({
+    to: Session.getEffectiveUser().getEmail(),
+    subject: '🐶 THOR: ' + (nuevas.length === 1 ? 'tenemos que hablar' : nuevas.length + ' cosas que tenemos que hablar'),
+    htmlBody: html,
+    body: nuevas.map(function (a) { return '• ' + a.texto; }).join('\n') + '\n\n' + APP_URL,
+  });
+
+  nuevas.forEach(function (a) { enviadas[a.clave] = true; });
+  props.setProperty('THOR_ENVIADAS', JSON.stringify(enviadas));
+  return { enviadas: nuevas.length };
+}

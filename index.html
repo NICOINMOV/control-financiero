@@ -20,8 +20,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=8" />
-  <script type="module" src="js/app.js?v=8"></script>
+  <link rel="stylesheet" href="css/styles.css?v=9" />
+  <script type="module" src="js/app.js?v=9"></script>
 </head>
 <body>
 
@@ -89,7 +89,7 @@
         <button id="thor" type="button" class="thor" aria-label="Otro consejo de THOR">
           <img src="icons/icon-192.png?v=2" alt="" />
           <div class="bubble">
-            <span class="thor-name">THOR DICE</span>
+            <span class="thor-name" id="thor-name">THOR DICE</span>
             <span id="thor-tip">Cargando tus datos…</span>
           </div>
         </button>
@@ -130,12 +130,13 @@
       <!-- ---------- CUENTAS ---------- -->
       <div id="tab-cuentas" data-tab class="hidden">
         <div class="card balance">
-          <span class="muted small">Patrimonio total</span>
-          <span class="big-number gold" id="patri-total">—</span>
+          <span class="muted small">🔒 Ahorro protegido</span>
+          <span class="big-number gold" id="patri-ahorro">—</span>
+          <span class="muted xs" id="patri-ahorro-estado"></span>
           <div class="trio">
-            <div><span class="muted xs">Personal</span><span class="strong" id="patri-personal">—</span></div>
-            <div><span class="muted xs">INMOV</span><span class="strong" id="patri-inmov">—</span></div>
+            <div><span class="muted xs">Disponible</span><span class="strong" id="patri-disponible">—</span></div>
             <div><span class="muted xs">Deuda tarjetas</span><span class="strong red" id="patri-deuda">—</span></div>
+            <div><span class="muted xs">Patrimonio neto</span><span class="strong" id="patri-neto">—</span></div>
           </div>
         </div>
         <div id="cuentas-list" class="stack"></div>

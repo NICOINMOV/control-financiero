@@ -501,3 +501,17 @@ select.input { -webkit-appearance: none; appearance: none; }
 .tag.inmov { border-color: #60A5FA; color: #93C5FD; }
 .neutral { color: #CBD5E1; }
 .tabbar button span { font-size: 10px; }
+
+/* ---------- THOR en modo alerta ---------- */
+.bubble.alerta { border-color: rgba(248, 113, 113, 0.55); background: linear-gradient(160deg, rgba(248, 113, 113, 0.12), var(--surface)); }
+.bubble.alerta .thor-name { color: var(--red); }
+.bubble.aviso { border-color: rgba(251, 146, 60, 0.5); background: linear-gradient(160deg, rgba(251, 146, 60, 0.10), var(--surface)); }
+.bubble.aviso .thor-name { color: #FB923C; }
+.shake { animation: shake 0.6s ease 2; }
+@keyframes shake {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-10deg); }
+  40% { transform: rotate(8deg); }
+  60% { transform: rotate(-6deg); }
+  80% { transform: rotate(4deg); }
+}
